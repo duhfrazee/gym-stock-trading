@@ -10,6 +10,11 @@ import pandas as pd
 from gym import error, spaces, utils
 from gym.utils import seeding
 
+from chart import Chart
+
+LOOKBACK_WINDOW_SIZE = 40
+
+
 class StockTradingEnv(gym.Env):
     """
     Description:
@@ -45,69 +50,92 @@ class StockTradingEnv(gym.Env):
         Solved Requirements
         Considered solved when the average reward is greater than or equal to 195.0 over 100 consecutive trials.
     """
-    
+
     metadata = {'render.modes': ['human']}
     visualization = None
 
-    def __init__(self, allotted_amount=10000.0):
+    def __init__(self, observation_size=1, allotted_amount=10000.0):
         super(StockTradingEnv, self).__init__()
 
-        self.asset_data = pd.DataFrame()
-        self.normalized_asset_data = pd.DataFrame()
-
-        self.reward = 0.0
         self.current_step = 0
 
-        self.timestamp = [INITIAL_DATE]
+        self.asset_data = None
+        self.normalized_asset_data = None
+        self.previous_close = None
+        self.daily_avg_volume = None
+        self.observation_size = observation_size
+
         self.base_value = allotted_amount
         self.equity = [allotted_amount]
         self.profit_loss = [0.0]
         self.cash = [allotted_amount]
-        self.positions = [(0, 0.0)]         # (qty, price)
+        self.positions = [(0, 0.0)]     # (qty, price)
         self.rewards = [0.0]
-
         self.max_qty = 0
 
-        # An action represents the amount of the portfolio that should be invested from -1 to 1.
-        # (negative is short, positive is long)
+        # Each action represents the amount of the portfolio that should be
+        # invested ranging from -1 to 1. Negative is short, positive is long.
         self.action_space = spaces.Box(
             low=np.array([-1]), high=np.array([1]), dtype=np.float16)
 
-        # Normalized: Open, High, Low, Close, Volume
+        # Normalized values for: Open, High, Low, Close, Volume
         self.observation_space = spaces.Box(
-            low=np.array([0, 0, 0, 0, 0]), high=np.array([1, 1, 1, 1, 1]), dtype=np.float16)
+            low=np.array([0, 0, 0, 0, 0]),
+            high=np.array([1, 1, 1, 1, 1]),
+            dtype=np.float16)
 
-    def _initialize_data(self):
+    # def _initialize_data(self):
 
-        # make sure file is '.csv'
-        path = '/Users/d/Documents/Projects/Python/gym-env/data/TSLA/'
-        filename = ''
-        while filename[-4:] != '.csv':
-            # get random data file
-            filename = random.choice(os.listdir(path))
+    #     # make sure file is '.csv'
+    #     path = '/Users/d/Documents/Projects/Python/gym-env/data/TSLA/'
+    #     filename = ''
+    #     while filename[-4:] != '.csv':
+    #         # get random data file
+    #         filename = random.choice(os.listdir(path))
 
-        print("Chosen csv file: " + filename)
+    #     print("Chosen csv file: " + filename)
 
-        # convert to data frame
-        dataframe = pd.read_csv(path + filename)
+    #     # convert to data frame
+    #     dataframe = pd.read_csv(path + filename)
 
-        normalized_dataframe = dataframe.copy()
+    #     normalized_dataframe = dataframe.copy()
 
-        with open(path + filename[:-4] + '-prev_close.txt') as f:
-            content = f.read()
-        prev_close = float(content)
+    #     with open(path + filename[:-4] + '-prev_close.txt') as f:
+    #         content = f.read()
+    #     prev_close = float(content)
 
-        self.open_price = dataframe.iloc[0]['open']
+    #     self.open_price = dataframe.iloc[0]['open']
 
-        # normalize  data
-        normalized_dataframe['open'] = normalized_dataframe['open'] / (2 * prev_close)
-        normalized_dataframe['high'] = normalized_dataframe['high'] / (2 * prev_close)
-        normalized_dataframe['low'] = normalized_dataframe['low'] / (2 * prev_close)
-        normalized_dataframe['close'] = normalized_dataframe['close'] / (2 * prev_close)
+    #     # normalize  data
+    #     normalized_dataframe['open'] = normalized_dataframe['open'] / (2 * prev_close)
+    #     normalized_dataframe['high'] = normalized_dataframe['high'] / (2 * prev_close)
+    #     normalized_dataframe['low'] = normalized_dataframe['low'] / (2 * prev_close)
+    #     normalized_dataframe['close'] = normalized_dataframe['close'] / (2 * prev_close)
+    #     # Potential bug if volume in one minute is 1/10 of average daily volume
+    #     normalized_dataframe['volume'] = normalized_dataframe['volume'] * 10 / TSLA_AVG_DAILY_VOLUME
+
+    #     return (dataframe, normalized_dataframe)
+
+    def _normalize_data(self, asset_data):
+        normalized_dataframe = asset_data.copy()
+
+        normalized_dataframe['open'] =\
+            normalized_dataframe['open'] / (2 * self.previous_close)
+
+        normalized_dataframe['high'] =\
+            normalized_dataframe['high'] / (2 * self.previous_close)
+
+        normalized_dataframe['low'] =\
+            normalized_dataframe['low'] / (2 * self.previous_close)
+
+        normalized_dataframe['close'] =\
+            normalized_dataframe['close'] / (2 * self.previous_close)
+
         # Potential bug if volume in one minute is 1/10 of average daily volume
-        normalized_dataframe['volume'] = normalized_dataframe['volume'] * 10 / TSLA_AVG_DAILY_VOLUME
+        normalized_dataframe['volume'] =\
+            normalized_dataframe['volume'] * 10 / self.daily_avg_volume
 
-        return (dataframe, normalized_dataframe)
+        return normalized_dataframe
 
     def _next_observation(self):
         # Get the stock data for the current step
@@ -121,10 +149,6 @@ class StockTradingEnv(gym.Env):
         return obs
 
     def _take_action(self, action):
-        # Definite bug
-        self.timestamp.append(self.asset_data.iloc[self.current_step]['timestamp'])
-
-        # Set the current price to the close price of the current step
         curr_price = self.asset_data.iloc[self.current_step]['close']
 
         # Current position
@@ -145,10 +169,10 @@ class StockTradingEnv(gym.Env):
             self.positions.append(new_position)
             self.cash.append(self.cash[-1] - purchase_amount)
             self.equity.append(self.cash[-1] + purchase_amount)
-
             self.profit_loss.append(0.0)
 
-        elif curr_qty > 0 and curr_qty + trade_qty < 0 or curr_qty < 0 and curr_qty + trade_qty > 0:
+        elif curr_qty > 0 and curr_qty + trade_qty < 0 or\
+                curr_qty < 0 and curr_qty + trade_qty > 0:
             # Trade crosses from short to long or long to short
 
             # Close current position, update P/L and cash
@@ -158,10 +182,13 @@ class StockTradingEnv(gym.Env):
                 self.profit_loss.append((curr_price - avg_price) * curr_qty)
             else:
                 # Closing short position
-                self.cash.append(self.cash[-1]
-                                 + abs(curr_qty)
-                                 * (avg_price - (curr_price - avg_price)))
-                self.profit_loss.append((avg_price - curr_price) * abs(curr_qty))
+                self.cash.append(
+                    self.cash[-1]
+                    + abs(curr_qty)
+                    * (avg_price - (curr_price - avg_price))
+                )
+                self.profit_loss.append(
+                    (avg_price - curr_price) * abs(curr_qty))
 
             # Simple short or long trade
             trade_qty += curr_qty
@@ -171,33 +198,41 @@ class StockTradingEnv(gym.Env):
             self.cash.append(self.cash[-1] - purchase_amount)
             self.equity.append(self.cash[-1] + purchase_amount)
 
-
         else:
             # Trade increases or reduces position (including closing out)
 
-            # Adding to position
-            if curr_qty > 0 and trade_qty > 0 or curr_qty < 0 and trade_qty < 0:
+            if curr_qty > 0 and trade_qty > 0 or\
+                    curr_qty < 0 and trade_qty < 0:
+                # Adding to position
+
                 purchase_amount = abs(trade_qty * curr_price)
 
                 while self.cash[-1] < purchase_amount:
-                    # Check if trade_qty is positive or negative and decrease accordingly
-                    trade_qty = trade_qty - 1 if trade_qty > 0 else trade_qty + 1
+                    # Descrease trade_qty if not enough cash
+                    trade_qty = trade_qty - 1 if trade_qty > 0\
+                            else trade_qty + 1
                     purchase_amount = abs(trade_qty * curr_price)
 
                 total_qty = trade_qty + curr_qty
-                avg_price = ((trade_qty * curr_price) + (curr_qty * avg_price)) / total_qty
+                avg_price = (
+                    ((trade_qty * curr_price) + (curr_qty * avg_price))
+                    / total_qty
+                )
                 new_position = (total_qty, avg_price)
                 self.positions.append(new_position)
                 self.cash.append(self.cash[-1] - purchase_amount)
 
                 if total_qty > 0:
                     # Long position
-                    self.equity.append(self.cash[-1] + (total_qty * curr_price))
+                    self.equity.append(
+                        self.cash[-1] + (total_qty * curr_price))
                 else:
                     # Short position
-                    self.equity.append(self.cash[-1]
-                                       + abs(total_qty)
-                                       * (avg_price - (curr_price - avg_price)))
+                    self.equity.append(
+                        self.cash[-1]
+                        + abs(total_qty)
+                        * (avg_price - (curr_price - avg_price))
+                    )
 
             # Reducing position or not changing
             else:
@@ -206,11 +241,14 @@ class StockTradingEnv(gym.Env):
                     self.cash.append(self.cash[-1]
                                      + abs(trade_qty)
                                      * (avg_price - (curr_price - avg_price)))
-                    self.profit_loss.append((avg_price - curr_price) * trade_qty)
+                    self.profit_loss.append(
+                        (avg_price - curr_price) * trade_qty)
                 else:
                     # Reducing long position
-                    self.cash.append(self.cash[-1] + abs(trade_qty * curr_price))
-                    self.profit_loss.append((curr_price - avg_price) * abs(trade_qty))
+                    self.cash.append(
+                        self.cash[-1] + abs(trade_qty * curr_price))
+                    self.profit_loss.append(
+                        (curr_price - avg_price) * abs(trade_qty))
 
                 net_qty = curr_qty + trade_qty
 
@@ -223,13 +261,15 @@ class StockTradingEnv(gym.Env):
 
                 if net_qty > 0:
                     # Long position
-                    self.equity.append(self.cash[-1] + abs(net_qty * curr_price))
+                    self.equity.append(
+                        self.cash[-1] + abs(net_qty * curr_price))
                 else:
                     # Short position
-                    self.equity.append(self.cash[-1]
-                                       + abs(net_qty)
-                                       * (avg_price - (curr_price - avg_price)))
-
+                    self.equity.append(
+                        self.cash[-1]
+                        + abs(net_qty)
+                        * (avg_price - (curr_price - avg_price))
+                    )
 
     def step(self, action):
         # Execute one time step within the environment
@@ -241,47 +281,44 @@ class StockTradingEnv(gym.Env):
 
         next_price = self.asset_data.iloc[self.current_step]['close']
 
-        self.reward = (next_price - curr_price) * self.positions[-1][0]
-        self.equity[-1] += self.reward
-        self.rewards.append(self.reward)
+        reward = (next_price - curr_price) * self.positions[-1][0]
+        self.equity[-1] += reward
+        self.rewards.append(reward)
 
+        # Episode ends when down 5% or DataFrame ends
         if self.current_step + 1 == len(self.asset_data):
             done = True
         else:
-            # Episode ends when down 5%
-            done = True if self.equity[-1] / self.base_value <= -0.05 else False
+            done = True if self.equity[-1] / self.base_value <= -0.05\
+                        else False
 
         obs = self._next_observation()
 
-        return obs, self.reward, done, {}
+        return obs, reward, done, {}
 
-    def reset(self, asset_data=None):
+    def reset(self, asset_data, previous_close, daily_avg_volume):
         """Reset the state of the environment to an initial state"""
-        self.asset_data,
-        self.normalized_asset_data = asset_data\
-                                     if asset_data is not None\
-                                     else self._initialize_data()
-        self.reward = 0.0
+        self.asset_data = asset_data
+        self.normalized_asset_data = self._normalize_data(asset_data)
+        self.previous_close = previous_close
+        self.daily_avg_volume = daily_avg_volume
+
         self.current_step = 0
 
-        self.timestamp = [INITIAL_DATE]
         self.equity = [self.base_value]
         self.profit_loss = [0.0]
         self.cash = [self.base_value]
         self.positions = [(0, 0.0)]
         self.rewards = [0.0]
-        self.max_qty = int((self.base_value / self.asset_data.iloc[self.current_step]['open']))
+        self.max_qty = int((self.base_value
+                            / self.asset_data.iloc[self.current_step]['open']))
 
         return self._next_observation()
 
     def render(self, mode='human', close=False):
-        # Render the environment to the screen
-        # print(f'Step: {self.current_step}')
-        # print(f'Total Profit/Loss: {sum(self.profit_loss)}')
-        # print(f'Reward {self.reward}\n')
-
-        if self.visualization == None:
-            self.visualization = Chart(self.asset_data, 'TSLA')
+        """Render the environment to the screen"""
+        if self.visualization is None:
+            self.visualization = Chart(self.asset_data)
 
         if self.current_step > LOOKBACK_WINDOW_SIZE:
             self.visualization.render(
