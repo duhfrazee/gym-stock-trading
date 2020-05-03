@@ -78,6 +78,7 @@ class StockTradingEnv(gym.Env):
         self.action_space = spaces.Box(
             low=np.array([-1]), high=np.array([1]), dtype=np.float16)
 
+        # TODO needs to be a dynamic observation space
         # Normalized values for: Open, High, Low, Close, Volume
         self.observation_space = spaces.Box(
             low=np.array([0, 0, 0, 0, 0]),
@@ -140,11 +141,21 @@ class StockTradingEnv(gym.Env):
     def _next_observation(self):
         # Get the stock data for the current step
         obs = np.array([
-            self.normalized_asset_data.iloc[self.current_step]['open'],
-            self.normalized_asset_data.iloc[self.current_step]['high'],
-            self.normalized_asset_data.iloc[self.current_step]['low'],
-            self.normalized_asset_data.iloc[self.current_step]['close'],
-            self.normalized_asset_data.iloc[self.current_step]['volume']
+            self.normalized_asset_data.loc[
+                self.current_step: self.current_step + self.observation_size,
+                'open'].values,
+            self.normalized_asset_data.loc[
+                self.current_step: self.current_step + self.observation_size,
+                'high'].values,
+            self.normalized_asset_data.loc[
+                self.current_step: self.current_step + self.observation_size,
+                'low'].values,
+            self.normalized_asset_data.loc[
+                self.current_step: self.current_step + self.observation_size,
+                'close'].values,
+            self.normalized_asset_data.loc[
+                self.current_step: self.current_step + self.observation_size,
+                'volume'].values,
         ])
         return obs
 
