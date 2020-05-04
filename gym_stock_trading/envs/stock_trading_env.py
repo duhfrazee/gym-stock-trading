@@ -78,7 +78,6 @@ class StockTradingEnv(gym.Env):
         self.action_space = spaces.Box(
             low=np.array([-1]), high=np.array([1]), dtype=np.float16)
 
-        # TODO needs to be a dynamic observation space
         # Normalized values for: Open, High, Low, Close, Volume
         self.observation_space = spaces.Box(
             low=0, high=1, shape=(5, observation_size), dtype=np.float16)
@@ -107,23 +106,24 @@ class StockTradingEnv(gym.Env):
     def _next_observation(self):
         # Get the stock data for the current observation size
 
-        window_start = self.current_step - self.observation_size + 1
+        offset = self.current_step - self.observation_size + 1
 
-        if window_start < 0:
-            observation_zeros = np.zeros([5, abs(window_start)])
-            window_start = 0
+        if offset < 0:
+            # Less data than observation_size
+            observation_zeros = np.zeros([5, abs(offset)])
+            offset = 0
 
         observation = np.array([
             self.normalized_asset_data.loc[
-                window_start: self.current_step+1, 'open'].values,
+                offset: self.current_step+1, 'open'].values,
             self.normalized_asset_data.loc[
-                window_start: self.current_step+1, 'high'].values,
+                offset: self.current_step+1, 'high'].values,
             self.normalized_asset_data.loc[
-                window_start: self.current_step+1, 'low'].values,
+                offset: self.current_step+1, 'low'].values,
             self.normalized_asset_data.loc[
-                window_start: self.current_step+1, 'close'].values,
+                offset: self.current_step+1, 'close'].values,
             self.normalized_asset_data.loc[
-                window_start: self.current_step+1, 'volume'].values,
+                offset: self.current_step+1, 'volume'].values,
         ])
 
         if observation.shape[1] < self.observation_size:
