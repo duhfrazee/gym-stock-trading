@@ -12,7 +12,7 @@ UP_TEXT_COLOR = '#73D3CC'
 DOWN_TEXT_COLOR = '#DC2C27'
 
 class Chart():
-    """A stock chart visualization using matplotlib 
+    """A stock chart visualization using matplotlib
     made to render TradingEnv OpenAI Gym Environment
     """
 

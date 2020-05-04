@@ -1,23 +1,78 @@
 import unittest
 
+import gym
 import numpy as np
 import pandas as pd
 
-from gym_stock_trading.envs import StockTradingEnv
-
-TSLA_AVG_DAILY_VOLUME = 18840000    # avg volume over last 30 days
-
 # Test observation space for several different sizes over several steps
+
 
 class TestStockTradingEnv(unittest.TestCase):
     def setUp(self):
-        self.env = StockTradingEnv()
-        self.previous_close = None
-        self.daily_avg_volume = None
+        self.env = gym.make('gym_stock_trading:StockTrading-v0')
+        self.previous_close = 291.81
+        self.daily_avg_volume = 18840000
+        self.path = '/Users/d/Documents/Projects/Python/gym-env/data/TSLA/'
+        self.filename = 'TSLA2019-04-04.csv'
+
+        step0_open = 261.89
+        step0_high = 262.77
+        step0_low = 260.59
+        step0_close = 261.625
+        step0_volume = 706650
+
+        self.correct_step0_obs = np.array([
+            [step0_open / (2 * self.previous_close)],
+            [step0_high / (2 * self.previous_close)],
+            [step0_low / (2 * self.previous_close)],
+            [step0_close / (2 * self.previous_close)],
+            [step0_volume * 10 / self.daily_avg_volume]
+        ])
+
+        step1_open = 261.68
+        step1_high = 263.5
+        step1_low = 261.59
+        step1_close = 263.3605
+        step1_volume = 378093
+
+        self.correct_step1_obs = np.array([
+            [step1_open / (2 * self.previous_close)],
+            [step1_high / (2 * self.previous_close)],
+            [step1_low / (2 * self.previous_close)],
+            [step1_close / (2 * self.previous_close)],
+            [step1_volume * 10 / self.daily_avg_volume]
+        ])
+
+        step2_open = 263.425
+        step2_high = 264.49
+        step2_low = 262.87
+        step2_close = 263.5859
+        step2_volume = 369398
+
+        self.correct_step2_obs = np.array([
+            [step2_open / (2 * self.previous_close)],
+            [step2_high / (2 * self.previous_close)],
+            [step2_low / (2 * self.previous_close)],
+            [step2_close / (2 * self.previous_close)],
+            [step2_volume * 10 / self.daily_avg_volume]
+        ])
+
+        laststep_open = 267.78
+        laststep_high = 267.8
+        laststep_low = 267.64
+        laststep_close = 267.64
+        laststep_volume = 4627
+
+        self.correct_laststep_obs = np.array([
+            [laststep_open / (2 * self.previous_close)],
+            [laststep_high / (2 * self.previous_close)],
+            [laststep_low / (2 * self.previous_close)],
+            [laststep_close / (2 * self.previous_close)],
+            [laststep_volume * 10 / self.daily_avg_volume]
+        ])
 
     def test_inititalize_env(self):
 
-        base_value = self.env.base_value
         initial_equity = self.env.equity[-1]
         profit_loss = self.env.profit_loss[-1]
         initial_cash = self.env.cash[-1]
@@ -25,19 +80,27 @@ class TestStockTradingEnv(unittest.TestCase):
         reward = self.env.rewards[-1]
         max_qty = self.env.max_qty
 
-        self.assertEqual(base_value, 10000)
-        self.assertEqual(base_value, initial_equity)
-        self.assertEqual(base_value, initial_cash)
+        self.assertEqual(self.env.current_step, 0)
+        self.assertEqual(self.env.asset_data, None)
+        self.assertEqual(self.env.normalized_asset_data, None)
+        self.assertEqual(self.env.previous_close, None)
+        self.assertEqual(self.env.daily_avg_volume, None)
+        self.assertEqual(self.env.observation_size, 1)
+        self.assertEqual(self.env.base_value, 10000)
+        self.assertEqual(initial_equity, self.env.base_value)
+        self.assertEqual(initial_cash, self.env.base_value)
         self.assertEqual(profit_loss, 0.0)
         self.assertEqual(intitial_position, (0, 0.0))
         self.assertEqual(reward, 0.0)
+        self.assertEqual(max_qty, None)
 
-        self.assertEqual(max_qty, 0)
-        
-    def test_reset(self):
-        obs = self.env.reset(self._initialize_data())
+    def test_default_reset(self):
+        obs = self.env.reset(
+            self._initialize_data(),
+            self.previous_close,
+            self.daily_avg_volume
+        )
 
-        base_value = self.env.base_value
         initial_equity = self.env.equity[-1]
         profit_loss = self.env.profit_loss[-1]
         initial_cash = self.env.cash[-1]
@@ -45,153 +108,229 @@ class TestStockTradingEnv(unittest.TestCase):
         reward = self.env.rewards[-1]
         max_qty = self.env.max_qty
 
-        self.assertEqual(base_value, 10000)
-        self.assertEqual(base_value, initial_equity)
-        self.assertEqual(base_value, initial_cash)
+        self.assertEqual(self.env.current_step, 0)
+        self.assertEqual(self.env.previous_close, self.previous_close)
+        self.assertEqual(self.env.daily_avg_volume, self.daily_avg_volume)
+        self.assertEqual(self.env.observation_size, 1)
+        self.assertEqual(self.env.base_value, 10000)
+        self.assertEqual(initial_equity, self.env.base_value)
+        self.assertEqual(initial_cash, self.env.base_value)
         self.assertEqual(profit_loss, 0.0)
         self.assertEqual(intitial_position, (0, 0.0))
         self.assertEqual(reward, 0.0)
-
-        correct_obs = np.array([261.89/(2*291.81), 262.77/(2*291.81), 260.59/(2*291.81), 261.625/(2*291.81), 706650*10/TSLA_AVG_DAILY_VOLUME])
-        np.testing.assert_array_equal(obs, correct_obs)
-
-        # int((allotted_amount / self.asset_data.iloc[self.current_step]['close']) * 0.95)  # Leave 5% room for price fluctuations
         self.assertEqual(max_qty, 38)
-        
-    def test_simple_long_trade_of_50_percent(self):
-        _ = self.env.reset(self._initialize_data())
 
-        # go long 50%
-        action = 0.5
+        np.testing.assert_array_equal(obs, self.correct_step0_obs)
+
+    def test_reset_for_observation_size_2_to_10(self):
+
+        for i in range(2, 11):
+            self.env = gym.make(
+                'gym_stock_trading:StockTrading-v0', observation_size=i)
+
+            obs = self.env.reset(
+                self._initialize_data(),
+                self.previous_close,
+                self.daily_avg_volume
+            )
+
+            initial_equity = self.env.equity[-1]
+            profit_loss = self.env.profit_loss[-1]
+            initial_cash = self.env.cash[-1]
+            intitial_position = self.env.positions[-1]
+            reward = self.env.rewards[-1]
+            max_qty = self.env.max_qty
+
+            self.assertEqual(self.env.current_step, 0)
+            self.assertEqual(self.env.previous_close, self.previous_close)
+            self.assertEqual(self.env.daily_avg_volume, self.daily_avg_volume)
+            self.assertEqual(self.env.observation_size, i)
+            self.assertEqual(self.env.base_value, 10000)
+            self.assertEqual(initial_equity, self.env.base_value)
+            self.assertEqual(initial_cash, self.env.base_value)
+            self.assertEqual(profit_loss, 0.0)
+            self.assertEqual(intitial_position, (0, 0.0))
+            self.assertEqual(reward, 0.0)
+            self.assertEqual(max_qty, 38)
+
+            correct_obs_zeros = np.zeros([5, i-1])
+            correct_obs = np.concatenate(
+                (self.correct_step0_obs, correct_obs_zeros), axis=1)
+
+            np.testing.assert_array_equal(obs, correct_obs)
+
+    def test_simple_long_trade_of_50_percent(self):
+        _ = self.env.reset(
+            self._initialize_data(),
+            self.previous_close,
+            self.daily_avg_volume
+        )
+
+        # Go long 50%
+        action = np.array([0.5])
         observation_, reward, done, info = self.env.step(action)
 
-        correct_observation = np.array([261.68/(2*291.81), 263.5/(2*291.81), 261.59/(2*291.81), 263.3605/(2*291.81), 378093*10/TSLA_AVG_DAILY_VOLUME])
+        np.testing.assert_array_equal(observation_, self.correct_step1_obs)
 
-        np.testing.assert_array_equal(observation_, correct_observation)
-        self.assertAlmostEqual(reward, 32.9745)
+        correct_reward = 32.9745
+        self.assertAlmostEqual(reward, correct_reward)
         self.assertEqual(done, False)
         self.assertEqual(info, {})
         self.assertEqual(self.env.profit_loss[-1], 0.0)
-        self.assertEqual(self.env.cash[-1], 10000.0-4970.875)
-        self.assertAlmostEqual(self.env.equity[-1], 10000.0+32.9745)
 
         correct_position = (19, 261.625)
         self.assertEqual(self.env.positions[-1], correct_position)
 
-    def test_simple_short_trade_of_50_percent(self):
-        _ = self.env.reset(self._initialize_data())
+        purchase_amount = correct_position[0] * correct_position[1]
+        self.assertEqual(self.env.cash[-1], 10000.0 - purchase_amount)
+        self.assertAlmostEqual(self.env.equity[-1], 10000.0 + correct_reward)
 
-        # go short 50%
-        action = -0.5
+    def test_simple_short_trade_of_50_percent(self):
+        _ = self.env.reset(
+            self._initialize_data(),
+            self.previous_close,
+            self.daily_avg_volume
+        )
+
+        # Go short 50%
+        action = np.array([-0.5])
         observation_, reward, done, info = self.env.step(action)
 
-        correct_observation = np.array([261.68/(2*291.81), 263.5/(2*291.81), 261.59/(2*291.81), 263.3605/(2*291.81), 378093*10/TSLA_AVG_DAILY_VOLUME])
+        np.testing.assert_array_equal(observation_, self.correct_step1_obs)
 
-        np.testing.assert_array_equal(observation_, correct_observation)
-        self.assertAlmostEqual(reward, -32.9745)
+        correct_reward = -32.9745
+        self.assertAlmostEqual(reward, correct_reward)
         self.assertEqual(done, False)
         self.assertEqual(info, {})
         self.assertEqual(self.env.profit_loss[-1], 0.0)
-        self.assertEqual(self.env.cash[-1], 10000.0-4970.875)
-        self.assertAlmostEqual(self.env.equity[-1], 10000.0-32.9745)
 
         correct_position = (-19, 261.625)
         self.assertEqual(self.env.positions[-1], correct_position)
 
-    def test_simple_long_trade_of_65_percent(self):
-        _ = self.env.reset(self._initialize_data())
+        purchase_amount = abs(correct_position[0] * correct_position[1])
+        self.assertEqual(self.env.cash[-1], 10000.0 - purchase_amount)
+        self.assertAlmostEqual(self.env.equity[-1], 10000.0 + correct_reward)
 
-        # go short 65%
-        action = 0.65
+    def test_simple_long_trade_of_65_percent(self):
+        _ = self.env.reset(
+            self._initialize_data(),
+            self.previous_close,
+            self.daily_avg_volume
+        )
+
+        # Go long 65%
+        action = np.array([0.65])
         observation_, reward, done, info = self.env.step(action)
 
-        correct_observation = np.array([261.68/(2*291.81), 263.5/(2*291.81), 261.59/(2*291.81), 263.3605/(2*291.81), 378093*10/TSLA_AVG_DAILY_VOLUME])
+        np.testing.assert_array_equal(observation_, self.correct_step1_obs)
 
-        np.testing.assert_array_equal(observation_, correct_observation)
-        self.assertAlmostEqual(reward, 41.652)
+        correct_reward = 41.652
+        self.assertAlmostEqual(reward, correct_reward)
         self.assertEqual(done, False)
         self.assertEqual(info, {})
         self.assertEqual(self.env.profit_loss[-1], 0.0)
-        self.assertEqual(self.env.cash[-1], 10000.0-6279.0)
-        self.assertAlmostEqual(self.env.equity[-1], 10000.0+41.652)
 
         correct_position = (24, 261.625)
         self.assertEqual(self.env.positions[-1], correct_position)
 
-    def test_simple_short_trade_of_65_percent(self):
-        _ = self.env.reset(self._initialize_data())
+        purchase_amount = correct_position[0] * correct_position[1]
+        self.assertEqual(self.env.cash[-1], 10000.0 - purchase_amount)
+        self.assertAlmostEqual(self.env.equity[-1], 10000.0 + correct_reward)
 
-        # go short 65%
-        action = -0.65
+    def test_simple_short_trade_of_65_percent(self):
+        _ = self.env.reset(
+            self._initialize_data(),
+            self.previous_close,
+            self.daily_avg_volume
+        )
+
+        # Go short 65%
+        action = np.array([-0.65])
         observation_, reward, done, info = self.env.step(action)
 
-        correct_observation = np.array([261.68/(2*291.81), 263.5/(2*291.81), 261.59/(2*291.81), 263.3605/(2*291.81), 378093*10/TSLA_AVG_DAILY_VOLUME])
+        np.testing.assert_array_equal(observation_, self.correct_step1_obs)
 
-        np.testing.assert_array_equal(observation_, correct_observation)
-        self.assertAlmostEqual(reward, -41.652)
+        correct_reward = -41.652
+        self.assertAlmostEqual(reward, correct_reward)
         self.assertEqual(done, False)
         self.assertEqual(info, {})
         self.assertEqual(self.env.profit_loss[-1], 0.0)
-        self.assertEqual(self.env.cash[-1], 10000.0-6279.0)
-        self.assertAlmostEqual(self.env.equity[-1], 10000.0-41.652)
 
         correct_position = (-24, 261.625)
         self.assertEqual(self.env.positions[-1], correct_position)
 
-    def test_simple_long_trade_of_100_percent(self):
-        _ = self.env.reset(self._initialize_data())
+        purchase_amount = abs(correct_position[0] * correct_position[1])
+        self.assertEqual(self.env.cash[-1], 10000.0 - purchase_amount)
+        self.assertAlmostEqual(self.env.equity[-1], 10000.0 + correct_reward)
 
-        # go long 100%
-        action = 1.0
+    def test_simple_long_trade_of_100_percent(self):
+        _ = self.env.reset(
+            self._initialize_data(),
+            self.previous_close,
+            self.daily_avg_volume
+        )
+
+        # Go long 100%
+        action = np.array([1.0])
         observation_, reward, done, info = self.env.step(action)
 
-        correct_observation = np.array([261.68/(2*291.81), 263.5/(2*291.81), 261.59/(2*291.81), 263.3605/(2*291.81), 378093*10/TSLA_AVG_DAILY_VOLUME])
+        np.testing.assert_array_equal(observation_, self.correct_step1_obs)
 
-        np.testing.assert_array_equal(observation_, correct_observation)
-        self.assertAlmostEqual(reward, 65.949)
+        correct_reward = 65.949
+        self.assertAlmostEqual(reward, correct_reward)
         self.assertEqual(done, False)
         self.assertEqual(info, {})
         self.assertEqual(self.env.profit_loss[-1], 0.0)
-        self.assertEqual(self.env.cash[-1], 10000.0-9941.75)
-        self.assertAlmostEqual(self.env.equity[-1], 10000.0 + 65.949)
 
         correct_position = (38, 261.625)
         self.assertEqual(self.env.positions[-1], correct_position)
 
-    def test_simple_short_trade_of_100_percent(self):
-        _ = self.env.reset(self._initialize_data())
+        purchase_amount = correct_position[0] * correct_position[1]
+        self.assertEqual(self.env.cash[-1], 10000.0 - purchase_amount)
+        self.assertAlmostEqual(self.env.equity[-1], 10000.0 + correct_reward)
 
-        # go short 100%
-        action = -1.0
+    def test_simple_short_trade_of_100_percent(self):
+        _ = self.env.reset(
+            self._initialize_data(),
+            self.previous_close,
+            self.daily_avg_volume
+        )
+
+        # Go short 100%
+        action = np.array([-1.0])
         observation_, reward, done, info = self.env.step(action)
 
-        correct_observation = np.array([261.68/(2*291.81), 263.5/(2*291.81), 261.59/(2*291.81), 263.3605/(2*291.81), 378093*10/TSLA_AVG_DAILY_VOLUME])
+        np.testing.assert_array_equal(observation_, self.correct_step1_obs)
 
-        np.testing.assert_array_equal(observation_, correct_observation)
-        self.assertAlmostEqual(reward, -65.949)
+        correct_reward = -65.949
+        self.assertAlmostEqual(reward, correct_reward)
         self.assertEqual(done, False)
         self.assertEqual(info, {})
         self.assertEqual(self.env.profit_loss[-1], 0.0)
-        self.assertEqual(self.env.cash[-1], 10000.0-9941.75)
-        self.assertAlmostEqual(self.env.equity[-1], 10000.0-65.949)
 
         correct_position = (-38, 261.625)
         self.assertEqual(self.env.positions[-1], correct_position)
 
-    def test_add_to_long_position(self):
-        _ = self.env.reset(self._initialize_data())
+        purchase_amount = abs(correct_position[0] * correct_position[1])
+        self.assertEqual(self.env.cash[-1], 10000.0 - purchase_amount)
+        self.assertAlmostEqual(self.env.equity[-1], 10000.0 + correct_reward)
 
-        # go long 50%
-        action1 = 0.5
+    def test_add_to_long_position(self):
+        _ = self.env.reset(
+            self._initialize_data(),
+            self.previous_close,
+            self.daily_avg_volume
+        )
+
+        # Go long 50%
+        action1 = np.array([0.5])
         self.env.step(action1)
 
-        # increase long position by 20%
-        action2 = 0.7
+        # Increase long position by 20%
+        action2 = np.array([0.7])
         observation_, reward, done, info = self.env.step(action2)
 
-        correct_observation = np.array([263.425/(2*291.81), 264.49/(2*291.81), 262.87/(2*291.81), 263.5859/(2*291.81), 369398*10/TSLA_AVG_DAILY_VOLUME])
-
-        np.testing.assert_array_equal(observation_, correct_observation)
+        np.testing.assert_array_equal(observation_, self.correct_step2_obs)
 
         correct_reward = 5.8604
         self.assertAlmostEqual(reward, correct_reward)
@@ -199,30 +338,33 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertEqual(info, {})
         self.assertEqual(self.env.profit_loss[-1], 0.0)
 
-        cash = 10000.0-6814.3985
-        curr_stock_value = 26 * 263.3605
-        self.assertEqual(self.env.cash[-1], cash)
-        self.assertAlmostEqual(self.env.equity[-1], cash + curr_stock_value + correct_reward)
-
         # 8 more shares at average price of 263.3605
         correct_position = (26, 262.09225)
         self.assertEqual(self.env.positions[-1][0], correct_position[0])
         self.assertAlmostEqual(self.env.positions[-1][1], correct_position[1])
 
-    def test_add_to_short_position(self):
-        _ = self.env.reset(self._initialize_data())
+        cash = 10000.0-6814.3985
+        curr_stock_value = 26 * 263.3605
+        self.assertEqual(self.env.cash[-1], cash)
+        self.assertAlmostEqual(
+            self.env.equity[-1], cash + curr_stock_value + correct_reward)
 
-        # go short 50%
-        action1 = -0.5
+    def test_add_to_short_position(self):
+        _ = self.env.reset(
+            self._initialize_data(),
+            self.previous_close,
+            self.daily_avg_volume
+        )
+
+        # Go short 50%
+        action1 = np.array([-0.5])
         self.env.step(action1)
 
-        # increase short position by 20%
-        action2 = -0.7
+        # Increase short position by 20%
+        action2 = np.array([-0.7])
         observation_, reward, done, info = self.env.step(action2)
 
-        correct_observation = np.array([263.425/(2*291.81), 264.49/(2*291.81), 262.87/(2*291.81), 263.5859/(2*291.81), 369398*10/TSLA_AVG_DAILY_VOLUME])
-
-        np.testing.assert_array_equal(observation_, correct_observation)
+        np.testing.assert_array_equal(observation_, self.correct_step2_obs)
 
         correct_reward = -5.8604
         self.assertAlmostEqual(reward, correct_reward)
@@ -230,11 +372,12 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertEqual(info, {})
         self.assertEqual(self.env.profit_loss[-1], 0.0)
 
-        
-        cash = 10000-4970.875-1843.5235
-        curr_stock_value = self._calculate_short_equity_value(26, 262.09225, 263.3605)
+        cash = 10000 - 4970.875 - 1843.5235
+        curr_stock_value = self._calculate_short_equity_value(
+            26, 262.09225, 263.3605)
         self.assertEqual(self.env.cash[-1], cash)
-        self.assertAlmostEqual(self.env.equity[-1], cash + curr_stock_value + correct_reward)
+        self.assertAlmostEqual(
+            self.env.equity[-1], cash + curr_stock_value + correct_reward)
 
         # 7 more shares at average price of 263.3605
         correct_position = (-26, 262.09225)
@@ -242,19 +385,21 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertAlmostEqual(self.env.positions[-1][1], correct_position[1])
 
     def test_reduce_long_position(self):
-        _ = self.env.reset(self._initialize_data())
+        _ = self.env.reset(
+            self._initialize_data(),
+            self.previous_close,
+            self.daily_avg_volume
+        )
 
-        # go long 50%
-        action1 = 0.5
+        # Go long 50%
+        action1 = np.array([0.5])
         self.env.step(action1)
 
-        # decrease long position by 35%
-        action2 = 0.15
+        # Decrease long position by 35%
+        action2 = np.array([0.15])
         observation_, reward, done, info = self.env.step(action2)
 
-        correct_observation = np.array([263.425/(2*291.81), 264.49/(2*291.81), 262.87/(2*291.81), 263.5859/(2*291.81), 369398*10/TSLA_AVG_DAILY_VOLUME])
-
-        np.testing.assert_array_equal(observation_, correct_observation)
+        np.testing.assert_array_equal(observation_, self.correct_step2_obs)
 
         correct_reward = 1.3524
         self.assertAlmostEqual(reward, correct_reward)
@@ -265,27 +410,31 @@ class TestStockTradingEnv(unittest.TestCase):
         cash = 10000.0 - 4970.875 + 3423.6865
         curr_stock_value = 6 * 263.3605
         self.assertEqual(self.env.cash[-1], cash)
-        self.assertAlmostEqual(self.env.equity[-1], cash + curr_stock_value + correct_reward)
+        self.assertAlmostEqual(
+            self.env.equity[-1], cash + curr_stock_value + correct_reward)
 
-        # selling 13 shares at 263.3605
+        # Selling 13 shares at 263.3605
         correct_position = (6, 261.625)
         self.assertEqual(self.env.positions[-1][0], correct_position[0])
-        self.assertAlmostEqual(self.env.positions[-1][1], correct_position[1])
+        self.assertAlmostEqual(
+            self.env.positions[-1][1], correct_position[1])
 
     def test_reduce_short_position(self):
-        _ = self.env.reset(self._initialize_data())
+        _ = self.env.reset(
+            self._initialize_data(),
+            self.previous_close,
+            self.daily_avg_volume
+        )
 
-        # go short 50%
-        action1 = -0.5
+        # Go short 50%
+        action1 = np.array([-0.5])
         self.env.step(action1)
 
-        # decrease short position by 35%
-        action2 = -0.15
+        # Decrease short position by 35%
+        action2 = np.array([-0.15])
         observation_, reward, done, info = self.env.step(action2)
 
-        correct_observation = np.array([263.425/(2*291.81), 264.49/(2*291.81), 262.87/(2*291.81), 263.5859/(2*291.81), 369398*10/TSLA_AVG_DAILY_VOLUME])
-
-        np.testing.assert_array_equal(observation_, correct_observation)
+        np.testing.assert_array_equal(observation_, self.correct_step2_obs)
 
         correct_reward = -1.3524
         self.assertAlmostEqual(reward, correct_reward)
@@ -293,30 +442,35 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertEqual(info, {})
         self.assertAlmostEqual(self.env.profit_loss[-1], -22.5615)
 
-        cash = 10000.0 - 4970.875 + self._calculate_short_equity_value(13, 261.625, 263.3605)
-        curr_stock_value = self._calculate_short_equity_value(6, 261.625, 263.3605)
+        cash = 10000.0 - 4970.875\
+            + self._calculate_short_equity_value(13, 261.625, 263.3605)
+        curr_stock_value = self._calculate_short_equity_value(
+            6, 261.625, 263.3605)
         self.assertEqual(self.env.cash[-1], cash)
-        self.assertAlmostEqual(self.env.equity[-1], cash + curr_stock_value + correct_reward)
+        self.assertAlmostEqual(
+            self.env.equity[-1], cash + curr_stock_value + correct_reward)
 
-        # selling 13 shares at 263.3605
+        # Selling 13 shares at 263.3605
         correct_position = (-6, 261.625)
         self.assertEqual(self.env.positions[-1][0], correct_position[0])
         self.assertAlmostEqual(self.env.positions[-1][1], correct_position[1])
 
     def test_close_long_position(self):
-        _ = self.env.reset(self._initialize_data())
+        _ = self.env.reset(
+            self._initialize_data(),
+            self.previous_close,
+            self.daily_avg_volume
+        )
 
-        # go long 50%
-        action1 = 0.5
+        # Go long 50%
+        action1 = np.array([0.5])
         self.env.step(action1)
 
-        # close long position
-        action2 = 0.0
+        # Close long position
+        action2 = np.array([0.0])
         observation_, reward, done, info = self.env.step(action2)
 
-        correct_observation = np.array([263.425/(2*291.81), 264.49/(2*291.81), 262.87/(2*291.81), 263.5859/(2*291.81), 369398*10/TSLA_AVG_DAILY_VOLUME])
-
-        np.testing.assert_array_equal(observation_, correct_observation)
+        np.testing.assert_array_equal(observation_, self.correct_step2_obs)
 
         correct_reward = 0.0
         self.assertAlmostEqual(reward, correct_reward)
@@ -327,26 +481,30 @@ class TestStockTradingEnv(unittest.TestCase):
         cash = 10000.0 + self.env.profit_loss[-1]
         curr_stock_value = 0
         self.assertEqual(self.env.cash[-1], cash)
-        self.assertAlmostEqual(self.env.equity[-1], cash + curr_stock_value + correct_reward)
+        self.assertAlmostEqual(
+            self.env.equity[-1], cash + curr_stock_value + correct_reward)
 
         correct_position = (0, 0.0)
         self.assertEqual(self.env.positions[-1][0], correct_position[0])
-        self.assertAlmostEqual(self.env.positions[-1][1], correct_position[1])
+        self.assertAlmostEqual(
+            self.env.positions[-1][1], correct_position[1])
 
     def test_close_short_position(self):
-        _ = self.env.reset(self._initialize_data())
+        _ = self.env.reset(
+            self._initialize_data(),
+            self.previous_close,
+            self.daily_avg_volume
+        )
 
-        # go short 50%
-        action1 = -0.5
+        # Go short 50%
+        action1 = np.array([-0.5])
         self.env.step(action1)
 
-        # close short position
-        action2 = 0.0
+        # Close short position
+        action2 = np.array([0.0])
         observation_, reward, done, info = self.env.step(action2)
 
-        correct_observation = np.array([263.425/(2*291.81), 264.49/(2*291.81), 262.87/(2*291.81), 263.5859/(2*291.81), 369398*10/TSLA_AVG_DAILY_VOLUME])
-
-        np.testing.assert_array_equal(observation_, correct_observation)
+        np.testing.assert_array_equal(observation_, self.correct_step2_obs)
 
         correct_reward = 0.0
         self.assertAlmostEqual(reward, correct_reward)
@@ -357,26 +515,30 @@ class TestStockTradingEnv(unittest.TestCase):
         cash = 10000.0 + self.env.profit_loss[-1]
         curr_stock_value = 0
         self.assertEqual(self.env.cash[-1], cash)
-        self.assertAlmostEqual(self.env.equity[-1], cash + curr_stock_value + correct_reward)
+        self.assertAlmostEqual(
+            self.env.equity[-1], cash + curr_stock_value + correct_reward)
 
         correct_position = (0, 0.0)
         self.assertEqual(self.env.positions[-1][0], correct_position[0])
-        self.assertAlmostEqual(self.env.positions[-1][1], correct_position[1])
+        self.assertAlmostEqual(
+            self.env.positions[-1][1], correct_position[1])
 
     def test_cross_from_long_to_short(self):
-        _ = self.env.reset(self._initialize_data())
+        _ = self.env.reset(
+            self._initialize_data(),
+            self.previous_close,
+            self.daily_avg_volume
+        )
 
-        # go long 50%
-        action1 = 0.5
+        # Go long 50%
+        action1 = np.array([0.5])
         self.env.step(action1)
 
-        # go short 85%
-        action2 = -0.85
+        # Go short 85%
+        action2 = np.array([-0.85])
         observation_, reward, done, info = self.env.step(action2)
 
-        correct_observation = np.array([263.425/(2*291.81), 264.49/(2*291.81), 262.87/(2*291.81), 263.5859/(2*291.81), 369398*10/TSLA_AVG_DAILY_VOLUME])
-
-        np.testing.assert_array_equal(observation_, correct_observation)
+        np.testing.assert_array_equal(observation_, self.correct_step2_obs)
 
         correct_reward = -7.2128
         self.assertAlmostEqual(reward, correct_reward)
@@ -395,19 +557,21 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertAlmostEqual(self.env.positions[-1][1], correct_position[1])
 
     def test_cross_from_short_to_long(self):
-        _ = self.env.reset(self._initialize_data())
+        _ = self.env.reset(
+            self._initialize_data(),
+            self.previous_close,
+            self.daily_avg_volume
+        )
 
-        # go short 50%
-        action1 = -0.5
+        # Go short 50%
+        action1 = np.array([-0.5])
         self.env.step(action1)
 
-        # go long 85%
-        action2 = 0.85
+        # Go long 85%
+        action2 = np.array([0.85])
         observation_, reward, done, info = self.env.step(action2)
 
-        correct_observation = np.array([263.425/(2*291.81), 264.49/(2*291.81), 262.87/(2*291.81), 263.5859/(2*291.81), 369398*10/TSLA_AVG_DAILY_VOLUME])
-
-        np.testing.assert_array_equal(observation_, correct_observation)
+        np.testing.assert_array_equal(observation_, self.correct_step2_obs)
 
         correct_reward = 7.2128
         self.assertAlmostEqual(reward, correct_reward)
@@ -418,7 +582,8 @@ class TestStockTradingEnv(unittest.TestCase):
         curr_stock_value = 32 * 263.3605
         cash = 10000 + self.env.profit_loss[-1] - curr_stock_value
         self.assertAlmostEqual(self.env.cash[-1], cash)
-        self.assertAlmostEqual(self.env.equity[-1], cash + curr_stock_value + correct_reward)
+        self.assertAlmostEqual(
+            self.env.equity[-1], cash + curr_stock_value + correct_reward)
 
         # 8 more shares at average price of 263.3605
         correct_position = (32, 263.3605)
@@ -426,46 +591,51 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertAlmostEqual(self.env.positions[-1][1], correct_position[1])
 
     def test_stay_long_50_percent_entire_episode(self):
-        _ = self.env.reset(self._initialize_data())
+        _ = self.env.reset(
+            self._initialize_data(),
+            self.previous_close,
+            self.daily_avg_volume
+        )
 
-        # go long 50%
-        action = 0.5
+        # Go long 50%
+        action = np.array([0.5])
 
         done = False
         while not done:
             observation_, reward, done, info = self.env.step(action)
 
-        correct_observation = np.array([267.78/(2*291.81), 267.8/(2*291.81), 267.64/(2*291.81), 267.64/(2*291.81), 4627*10/TSLA_AVG_DAILY_VOLUME])
+        np.testing.assert_array_equal(observation_, self.correct_laststep_obs)
 
-        np.testing.assert_array_equal(observation_, correct_observation)
-        
         correct_reward = -3.04
         self.assertAlmostEqual(reward, correct_reward)
         self.assertEqual(done, True)
         self.assertEqual(info, {})
         self.assertAlmostEqual(self.env.profit_loss[-1], 0.0)
 
-        cash = 10000.0-4970.875
+        correct_position = (19, 261.625)
+        self.assertEqual(self.env.positions[-1], correct_position)
+
+        purchase_amount = correct_position[0] * correct_position[1]
+        cash = 10000.0 - purchase_amount
         curr_stock_value = 19 * 267.64
         self.assertEqual(self.env.cash[-1], cash)
         self.assertAlmostEqual(self.env.equity[-1], cash + curr_stock_value)
 
-        correct_position = (19, 261.625)
-        self.assertEqual(self.env.positions[-1], correct_position)
-
     def test_stay_short_50_percent_entire_episode(self):
-        _ = self.env.reset(self._initialize_data())
+        _ = self.env.reset(
+            self._initialize_data(),
+            self.previous_close,
+            self.daily_avg_volume
+        )
 
-        # go short 50%
-        action = -0.5
+        # Go short 50%
+        action = np.array([-0.5])
 
         done = False
         while not done:
             observation_, reward, done, info = self.env.step(action)
 
-        correct_observation = np.array([267.78/(2*291.81), 267.8/(2*291.81), 267.64/(2*291.81), 267.64/(2*291.81), 4627*10/TSLA_AVG_DAILY_VOLUME])
-
-        np.testing.assert_array_equal(observation_, correct_observation)
+        np.testing.assert_array_equal(observation_, self.correct_laststep_obs)
 
         correct_reward = 3.04
         self.assertAlmostEqual(reward, correct_reward)
@@ -473,52 +643,32 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertEqual(info, {})
         self.assertAlmostEqual(self.env.profit_loss[-1], 0.0)
 
-        cash = 10000.0-4970.875
-        curr_stock_value = (19 * (261.625 - (267.64 - 261.625)))
-        self.assertEqual(self.env.cash[-1], cash)
-        self.assertAlmostEqual(self.env.equity[-1], cash + curr_stock_value)
-
         correct_position = (-19, 261.625)
         self.assertEqual(self.env.positions[-1], correct_position)
 
-    def _initialize_env(self):
-        asset_data = self._initialize_data()
-        return StockTradingEnv(asset_data)
+        purchase_amount = abs(correct_position[0] * correct_position[1])
+        cash = 10000.0 - purchase_amount
+        curr_stock_value = self._calculate_short_equity_value(
+            19, 261.625, 267.64)
+        self.assertEqual(self.env.cash[-1], cash)
+        self.assertAlmostEqual(self.env.equity[-1], cash + curr_stock_value)
 
     def _initialize_data(self):
-        """Creates two DataFrames from csv file. One raw, one normalized.
+
+        """Creates a DataFrame from csv file.
 
         Returns:
-            (pd.DataFrame, pd.DataFrame) -- 1min candle stick data (including volume) for 1 day
+            pd.DataFrame -- 1min candle stick data (including volume) for 1 day
         """
 
-        # make sure file is '.csv'
-        path = '/Users/d/Documents/Projects/Python/gym-env/data/TSLA/'
-        filename = 'TSLA2019-04-04.csv'
-
         # convert to data frame
-        dataframe = pd.read_csv(path + filename)
+        asset_data = pd.read_csv(self.path + self.filename)
 
-
-        with open(path + filename[:-4] + '-prev_close.txt') as f:
-            content = f.read()
-            
-        prev_close = float(content)
-    
-        # normalize  data
-        normalized_dataframe = dataframe.copy()
-
-        normalized_dataframe['open'] = normalized_dataframe['open'] / (2 * prev_close)
-        normalized_dataframe['high'] = normalized_dataframe['high'] / (2 * prev_close)
-        normalized_dataframe['low'] = normalized_dataframe['low'] / (2 * prev_close)
-        normalized_dataframe['close'] = normalized_dataframe['close'] / (2 * prev_close)
-        # Potential bug if volume in one minute is 1/10 of average daily volume
-        normalized_dataframe['volume'] = normalized_dataframe['volume'] * 10 / TSLA_AVG_DAILY_VOLUME
-         
-        return (dataframe, normalized_dataframe)
+        return asset_data
 
     def _calculate_short_equity_value(self, shares, avg_price, curr_price):
         return abs(shares) * (avg_price - (curr_price - avg_price))
+
 
 if __name__ == '__main__':
     unittest.main()
