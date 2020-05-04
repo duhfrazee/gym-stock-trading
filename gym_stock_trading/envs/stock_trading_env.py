@@ -127,7 +127,8 @@ class StockTradingEnv(gym.Env):
         ])
 
         if observation.shape[1] < self.observation_size:
-            observation = np.concatenate((observation, observation_zeros), axis=1)
+            observation = np.concatenate(
+                (observation, observation_zeros), axis=1)
 
         return observation
 
