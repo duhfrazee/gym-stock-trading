@@ -81,41 +81,7 @@ class StockTradingEnv(gym.Env):
         # TODO needs to be a dynamic observation space
         # Normalized values for: Open, High, Low, Close, Volume
         self.observation_space = spaces.Box(
-            low=np.array([0, 0, 0, 0, 0]),
-            high=np.array([1, 1, 1, 1, 1]),
-            dtype=np.float16)
-
-    # def _initialize_data(self):
-
-    #     # make sure file is '.csv'
-    #     path = '/Users/d/Documents/Projects/Python/gym-env/data/TSLA/'
-    #     filename = ''
-    #     while filename[-4:] != '.csv':
-    #         # get random data file
-    #         filename = random.choice(os.listdir(path))
-
-    #     print("Chosen csv file: " + filename)
-
-    #     # convert to data frame
-    #     dataframe = pd.read_csv(path + filename)
-
-    #     normalized_dataframe = dataframe.copy()
-
-    #     with open(path + filename[:-4] + '-prev_close.txt') as f:
-    #         content = f.read()
-    #     prev_close = float(content)
-
-    #     self.open_price = dataframe.iloc[0]['open']
-
-    #     # normalize  data
-    #     normalized_dataframe['open'] = normalized_dataframe['open'] / (2 * prev_close)
-    #     normalized_dataframe['high'] = normalized_dataframe['high'] / (2 * prev_close)
-    #     normalized_dataframe['low'] = normalized_dataframe['low'] / (2 * prev_close)
-    #     normalized_dataframe['close'] = normalized_dataframe['close'] / (2 * prev_close)
-    #     # Potential bug if volume in one minute is 1/10 of average daily volume
-    #     normalized_dataframe['volume'] = normalized_dataframe['volume'] * 10 / TSLA_AVG_DAILY_VOLUME
-
-    #     return (dataframe, normalized_dataframe)
+            low=0, high=1, shape=(5, observation_size), dtype=np.float16)
 
     def _normalize_data(self, asset_data):
         normalized_dataframe = asset_data.copy()
@@ -139,25 +105,31 @@ class StockTradingEnv(gym.Env):
         return normalized_dataframe
 
     def _next_observation(self):
-        # Get the stock data for the current step
-        obs = np.array([
+        # Get the stock data for the current observation size
+
+        window_start = self.current_step - self.observation_size + 1
+
+        if window_start < 0:
+            observation_zeros = np.zeros([5, abs(window_start)])
+            window_start = 0
+
+        observation = np.array([
             self.normalized_asset_data.loc[
-                self.current_step: self.current_step + self.observation_size,
-                'open'].values,
+                window_start: self.current_step+1, 'open'].values,
             self.normalized_asset_data.loc[
-                self.current_step: self.current_step + self.observation_size,
-                'high'].values,
+                window_start: self.current_step+1, 'high'].values,
             self.normalized_asset_data.loc[
-                self.current_step: self.current_step + self.observation_size,
-                'low'].values,
+                window_start: self.current_step+1, 'low'].values,
             self.normalized_asset_data.loc[
-                self.current_step: self.current_step + self.observation_size,
-                'close'].values,
+                window_start: self.current_step+1, 'close'].values,
             self.normalized_asset_data.loc[
-                self.current_step: self.current_step + self.observation_size,
-                'volume'].values,
+                window_start: self.current_step+1, 'volume'].values,
         ])
-        return obs
+
+        if observation.shape[1] < self.observation_size:
+            observation = np.concatenate((observation, observation_zeros), axis=1)
+
+        return observation
 
     def _take_action(self, action):
         curr_price = self.asset_data.iloc[self.current_step]['close']

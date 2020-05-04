@@ -7,12 +7,16 @@ from gym_stock_trading.envs import StockTradingEnv
 
 TSLA_AVG_DAILY_VOLUME = 18840000    # avg volume over last 30 days
 
+# Test observation space for several different sizes over several steps
+
 class TestStockTradingEnv(unittest.TestCase):
     def setUp(self):
         self.env = StockTradingEnv()
+        self.previous_close = None
+        self.daily_avg_volume = None
 
     def test_inititalize_env(self):
-        #self.env = StockTradingEnv()
+
         base_value = self.env.base_value
         initial_equity = self.env.equity[-1]
         profit_loss = self.env.profit_loss[-1]
@@ -28,7 +32,6 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertEqual(intitial_position, (0, 0.0))
         self.assertEqual(reward, 0.0)
 
-        # int((allotted_amount / self.asset_data.iloc[self.current_step]['close']) * 0.95)  # Leave 5% room for price fluctuations
         self.assertEqual(max_qty, 0)
         
     def test_reset(self):
