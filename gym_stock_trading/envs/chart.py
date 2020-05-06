@@ -11,9 +11,10 @@ DOWN_COLOR = '#EF534F'
 UP_TEXT_COLOR = '#73D3CC'
 DOWN_TEXT_COLOR = '#DC2C27'
 
+
 class Chart():
     """A stock chart visualization using matplotlib
-    made to render TradingEnv OpenAI Gym Environment
+    made to render StockTrading OpenAI Gym Environment
     """
 
     def __init__(self, asset_data, title=None):
@@ -42,57 +43,71 @@ class Chart():
         # Show the graph without blocking the rest of the program
         plt.show(block=False)
 
-    def _render_account_value(self, current_step, account_value, step_range, dates):
+    def _render_account_value(
+            self, current_step, account_value, step_range, dates):
+
         # Clear the frame rendered last step
         self.account_value_ax.clear()
 
-        # Plot net worths
+        # Plot account values
         self.account_value_ax.plot_date(
-            dates, self.account_values[step_range], '-', label='Net Worth')
+            dates, self.account_values[step_range], '-', label='Account Value')
 
         # Show legend, which uses the label we defined for the plot above
         self.account_value_ax.legend()
         legend = self.account_value_ax.legend(loc=2, ncol=2, prop={'size': 8})
         legend.get_frame().set_alpha(0.4)
 
-        last_date = self._date2num(self.asset_data['timestamp'].values[current_step])
-        last_net_worth = self.account_values[current_step]
+        last_date = self._date2num(
+            self.asset_data['timestamp'].values[current_step])
+        last_account_value = self.account_values[current_step]
 
-        # Annotate the current net worth on the net worth graph
-        self.account_value_ax.annotate('{0:.2f}'.format(account_value), (last_date, last_net_worth),
-                                   xytext=(last_date, last_net_worth),
-                                   bbox=dict(boxstyle='round',
-                                             fc='w', ec='k', lw=1),
-                                   color="black",
-                                   fontsize="small")
+        # Annotate the current account value on the account value graph
+        self.account_value_ax.annotate(
+            '{0:.2f}'.format(account_value),
+            (last_date, last_account_value),
+            xytext=(last_date, last_account_value),
+            bbox=dict(boxstyle='round', fc='w', ec='k', lw=1),
+            color="black",
+            fontsize="small"
+        )
 
-        # Add space above and below min/max net worth
+        # Add space above and below min/max account value
         self.account_value_ax.set_ylim(
-            min(self.account_values[np.nonzero(self.account_values)]) / 1.25, max(self.account_values) * 1.25)
+            min(self.account_values[np.nonzero(self.account_values)])
+            / 1.25, max(self.account_values) * 1.25
+        )
 
     def _render_price(self, current_step, account_value, dates, step_range):
         self.price_ax.clear()
 
         # Format data for OHCL candlestick graph
-        candlesticks = zip(dates,
-                           self.asset_data['open'].values[step_range], self.asset_data['close'].values[step_range],
-                           self.asset_data['high'].values[step_range], self.asset_data['low'].values[step_range])
+        candlesticks = zip(
+            dates,
+            self.asset_data['open'].values[step_range],
+            self.asset_data['close'].values[step_range],
+            self.asset_data['high'].values[step_range],
+            self.asset_data['low'].values[step_range]
+        )
 
         # Plot price using candlestick graph from mpl_finance
-        candlestick(self.price_ax, candlesticks, width= 0.5/(24*60),
+        candlestick(self.price_ax, candlesticks, width=0.5/(24*60),
                     colorup=UP_COLOR, colordown=DOWN_COLOR)
 
-        last_date = self._date2num(self.asset_data['timestamp'].values[current_step])
+        last_date = self._date2num(
+            self.asset_data['timestamp'].values[current_step])
         last_close = self.asset_data['close'].values[current_step]
         last_high = self.asset_data['high'].values[current_step]
 
         # Print the current price to the price axis
-        self.price_ax.annotate('{0:.2f}'.format(last_close), (last_date, last_close),
-                               xytext=(last_date, last_high),
-                               bbox=dict(boxstyle='round',
-                                         fc='w', ec='k', lw=1),
-                               color="black",
-                               fontsize="small")
+        self.price_ax.annotate(
+            '{0:.2f}'.format(last_close),
+            (last_date, last_close),
+            xytext=(last_date, last_high),
+            bbox=dict(boxstyle='round', fc='w', ec='k', lw=1),
+            color="black",
+            fontsize="small"
+        )
 
         # Shift price axis up to give volume chart space
         ylim = self.price_ax.get_ylim()
@@ -121,16 +136,15 @@ class Chart():
 
     def _render_trades(self, current_step, positions, step_range):
 
-        positions = [(i, position[0], position[1]) for i,position in enumerate(positions)]
-        for i,position in enumerate(positions):
-            step = position[0]
+        for step, position in enumerate(positions):
             if step in step_range:
-                date = self._date2num(self.asset_data['timestamp'].values[step])
+                date = self._date2num(
+                    self.asset_data['timestamp'].values[step])
                 high = self.asset_data['high'].values[step]
                 low = self.asset_data['low'].values[step]
 
-                curr_qty = position[1]
-                prev_qty = positions[i-1][1]
+                curr_qty = position[0]
+                prev_qty = positions[step-1][0]
 
                 if curr_qty > prev_qty:
                     # bought
@@ -161,20 +175,26 @@ class Chart():
         window_start = max(current_step - window_size, 0)
         step_range = range(window_start, current_step + 1)
 
-        self.fig.suptitle(positions[current_step])
+        if self.fig.suptitle is None:
+            self.fig.suptitle(positions[current_step])
 
         # Format dates as timestamps, necessary for candlestick graph
-        dates = np.array([self._date2num(x)
-                          for x in self.asset_data['timestamp'].values[step_range]])
+        dates = np.array(
+            [self._date2num(x)
+                for x in self.asset_data['timestamp'].values[step_range]])
 
-        self._render_account_value(current_step, account_value, step_range, dates)
+        self._render_account_value(
+            current_step, account_value, step_range, dates)
         self._render_price(current_step, account_value, dates, step_range)
         self._render_volume(current_step, account_value, dates, step_range)
         self._render_trades(current_step, positions, step_range)
 
         # Format the date ticks to be more easily read
-        self.price_ax.set_xticklabels(self.asset_data['timestamp'].values[step_range], rotation=45,
-                                      horizontalalignment='right')
+        self.price_ax.set_xticklabels(
+            self.asset_data['timestamp'].values[step_range],
+            rotation=45,
+            horizontalalignment='right'
+        )
 
         # Hide duplicate net worth date labels
         plt.setp(self.account_value_ax.get_xticklabels(), visible=False)
