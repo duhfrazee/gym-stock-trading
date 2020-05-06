@@ -13,8 +13,9 @@ import pandas as pd
 
 from gym import error, spaces, utils
 from gym.utils import seeding
-# import mplfinance as mpf
-from mpl_finance import candlestick_ochl as candlestick
+import mplfinance as mpf
+# from mplfinance import candlestick_ochl as candlestick
+# from mpl_finance import candlestick_ochl as candlestick
 
 LOOKBACK_WINDOW_SIZE = 40
 VOLUME_CHART_HEIGHT = 0.33
@@ -94,17 +95,21 @@ class Chart():
         self.price_ax.clear()
 
         # Format data for OHCL candlestick graph
-        candlesticks = zip(
-            dates,
-            self.asset_data['open'].values[step_range],
-            self.asset_data['close'].values[step_range],
-            self.asset_data['high'].values[step_range],
-            self.asset_data['low'].values[step_range]
+        candlesticks = self.asset_data.loc[step_range].set_index('timestamp')
+        candlesticks.index = pd.to_datetime(candlesticks.index)
+        candlesticks.rename(
+            columns={
+                'open': 'Open',
+                'close': 'Close',
+                'high': 'High',
+                'low': 'Low',
+                'volume': 'Volume'
+            },
+            inplace=True
         )
 
-        # Plot price using candlestick graph from mpl_finance
-        candlestick(self.price_ax, candlesticks, width=0.5/(24*60),
-                    colorup=UP_COLOR, colordown=DOWN_COLOR)
+        # Plot price using candlestick graph from mplfinance
+        mpf.plot(candlesticks, type='candle', volume=True)
 
         last_date = self._date2num(
             self.asset_data['timestamp'].values[current_step])
@@ -508,12 +513,12 @@ class StockTradingEnv(gym.Env):
         if self.visualization is None:
             self.visualization = Chart(self.asset_data)
 
-        if self.current_step > LOOKBACK_WINDOW_SIZE:
-            self.visualization.render(
-                self.current_step,
-                self.equity[-1],
-                self.positions,
-                window_size=LOOKBACK_WINDOW_SIZE)
+        # if self.current_step > LOOKBACK_WINDOW_SIZE:
+        self.visualization.render(
+            self.current_step,
+            self.equity[-1],
+            self.positions,
+            window_size=LOOKBACK_WINDOW_SIZE)
 
     def close(self):
         pass
