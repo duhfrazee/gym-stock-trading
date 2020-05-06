@@ -227,8 +227,6 @@ class TestStockTradingEnv(unittest.TestCase):
                         offset: step]['volume'].values,
                 ])
 
-                print(observation_)
-
                 if correct_obs.shape[1] < obs_size:
                     correct_obs = np.concatenate(
                         (correct_obs, observation_zeros), axis=1)
