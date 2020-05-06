@@ -179,8 +179,18 @@ class Chart():
         return mdates.datestr2num(date)
 
     def render(self, current_step, account_value, positions, window_size=40):
-        # Env is one step ahead of observation
-        # current_step -= 1
+        """render() utilizes matplotlib to visualize the observations and
+           actions.
+
+        Arguments:
+            current_step {int} -- current_step of environment
+            account_value {float} -- total equity at current_step
+            positions {list} -- list of all positions over current episode
+
+        Keyword Arguments:
+            window_size {int} -- maximum number of candlesticks to show
+            (default: {40})
+        """
         self.account_values[current_step] = account_value
 
         window_start = max(current_step - window_size, 0)
@@ -219,37 +229,35 @@ class Chart():
 class StockTradingEnv(gym.Env):
     """
     Description:
-        A pole is attached by an un-actuated joint to a cart, which moves along a frictionless track. The pendulum
-        starts upright, and the goal is to prevent it from falling over by increasing and reducing the cart's velocity.
-    Source:
-        This environment corresponds to the version of the cart-pole problem described by Barto, Sutton, and Anderson
-    Observation: 
-        Type: Box(4)
+        A simulated stock trading environment with the ability go long and
+        short. The data is the normalized OHLC and volume values for
+        1 minute candlesticks.
+
+    Observation:
+        Type: Box(low=0, high=1, shape=(5, observation_size), dtype=np.float16)
+        Description: The observation_size is set during environment creation
+            and represents the number of 1min candlesticks in the observation.
         Num	Observation               Min             Max
-        0	Cart Position             -4.8            4.8
-        1	Cart Velocity             -Inf            Inf
-        2	Pole Angle                -24 deg         24 deg
-        3	Pole Velocity At Tip      -Inf            Inf
-        
+        0	Open                      -1              1
+        1	High                      -1              1
+        2	Low                       -1              1
+        3	Close                     -1              1
+        4   Volume                    -1              1
+
     Actions:
-        Type: Discrete(2)
-        Num	Action
-        0	Push cart to the left
-        1	Push cart to the right
-        
-        Note: The amount the velocity that is reduced or increased is not fixed; it depends on the angle the pole is
-        pointing. This is because the center of gravity of the pole increases the amount of energy needed to move the
-        cart underneath it
+        Type: spaces.Box(
+            low=np.array([-1]), high=np.array([1]), dtype=np.float16)
+        Description: The action space represents the percentage of the account
+            to invest. Negative is short, Positive is long.
+        Num	Action                              Min         Max
+        0	Percentage of account to invest     -1          1
+
     Reward:
-        Reward is 1 for every step taken, including the termination step
+        Reward is the unrealized profit/loss for the next observation.
     Starting State:
-        All observations are assigned a uniform random value in [-0.05..0.05]
+        First candlestick observation in dataset.
     Episode Termination:
-        Pole Angle is more than 12 degrees
-        Cart Position is more than 2.4 (center of the cart reaches the edge of the display)
-        Episode length is greater than 200
-        Solved Requirements
-        Considered solved when the average reward is greater than or equal to 195.0 over 100 consecutive trials.
+        Agent loses more than 5% or day ends.
     """
 
     metadata = {'render.modes': ['human']}
