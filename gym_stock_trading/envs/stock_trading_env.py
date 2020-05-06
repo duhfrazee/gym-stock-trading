@@ -13,8 +13,7 @@ import pandas as pd
 
 from gym import error, spaces, utils
 from gym.utils import seeding
-# import mplfinance as mpf
-from mpl_finance import candlestick_ochl as candlestick
+from mplfinance.original_flavor import candlestick_ochl as candlestick
 
 LOOKBACK_WINDOW_SIZE = 40
 VOLUME_CHART_HEIGHT = 0.33
