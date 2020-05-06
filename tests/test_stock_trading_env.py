@@ -4,8 +4,6 @@ import gym
 import numpy as np
 import pandas as pd
 
-# Test observation space for several different sizes over several steps
-
 
 class TestStockTradingEnv(unittest.TestCase):
     def setUp(self):
@@ -158,6 +156,85 @@ class TestStockTradingEnv(unittest.TestCase):
                 (self.correct_step0_obs, correct_obs_zeros), axis=1)
 
             np.testing.assert_array_equal(obs, correct_obs)
+            self.assertEqual(obs.shape[1], i)
+
+    def test_step1_for_observation_size_2_to_10(self):
+
+        for i in range(2, 11):
+            self.env = gym.make(
+                'gym_stock_trading:StockTrading-v0', observation_size=i)
+
+            _ = self.env.reset(
+                self._initialize_data(),
+                self.previous_close,
+                self.daily_avg_volume
+            )
+
+            # Go long 50%
+            action = np.array([0.5])
+            observation_, _, _, _ = self.env.step(action)
+
+            correct_obs_zeros = np.zeros([5, abs(2 - i)])
+            correct_obs = np.concatenate(
+                (self.correct_step0_obs, self.correct_step1_obs), axis=1)
+            correct_obs = np.concatenate(
+                (correct_obs, correct_obs_zeros), axis=1)
+
+            np.testing.assert_array_equal(observation_, correct_obs)
+            self.assertEqual(observation_.shape[1], i)
+
+    def test_observation_size_2_to_10_for_step_0_to_10(self):
+
+        for obs_size in range(2, 11):
+            self.env = gym.make(
+                'gym_stock_trading:StockTrading-v0', observation_size=obs_size)
+
+            obs = self.env.reset(
+                self._initialize_data(),
+                self.previous_close,
+                self.daily_avg_volume
+            )
+
+            correct_obs_zeros = np.zeros([5, obs_size-1])
+            correct_obs = np.concatenate(
+                (self.correct_step0_obs, correct_obs_zeros), axis=1)
+
+            np.testing.assert_array_equal(obs, correct_obs)
+
+            for step in range(1, 11):
+
+                # Go long 50%
+                action = np.array([0.5])
+                observation_, _, _, _ = self.env.step(action)
+
+                offset = step+1 - obs_size
+
+                if offset < 0:
+                    # Less data than observation_size
+                    observation_zeros = np.zeros([5, abs(offset)])
+                    offset = 0
+
+                correct_obs = np.array([
+                    self.env.normalized_asset_data.loc[
+                        offset: step]['open'].values,
+                    self.env.normalized_asset_data.loc[
+                        offset: step]['high'].values,
+                    self.env.normalized_asset_data.loc[
+                        offset: step]['low'].values,
+                    self.env.normalized_asset_data.loc[
+                        offset: step]['close'].values,
+                    self.env.normalized_asset_data.loc[
+                        offset: step]['volume'].values,
+                ])
+
+                print(observation_)
+
+                if correct_obs.shape[1] < obs_size:
+                    correct_obs = np.concatenate(
+                        (correct_obs, observation_zeros), axis=1)
+
+                np.testing.assert_array_equal(observation_, correct_obs)
+                self.assertEqual(observation_.shape[1], obs_size)
 
     def test_simple_long_trade_of_50_percent(self):
         _ = self.env.reset(
@@ -549,7 +626,8 @@ class TestStockTradingEnv(unittest.TestCase):
         curr_stock_value = 32 * 263.3605
         cash = 10000 + self.env.profit_loss[-1] - curr_stock_value
         self.assertAlmostEqual(self.env.cash[-1], cash)
-        self.assertAlmostEqual(self.env.equity[-1], cash + curr_stock_value + correct_reward)
+        self.assertAlmostEqual(
+            self.env.equity[-1], cash + curr_stock_value + correct_reward)
 
         # 8 more shares at average price of 263.3605
         correct_position = (-32, 263.3605)

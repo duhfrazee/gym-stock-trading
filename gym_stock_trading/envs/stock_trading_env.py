@@ -288,26 +288,27 @@ class StockTradingEnv(gym.Env):
         return normalized_dataframe
 
     def _next_observation(self):
-        # Get the stock data for the current observation size
+        """Get the stock data for the current observation size."""
 
-        offset = self.current_step - self.observation_size + 1
+        offset = self.current_step+1 - self.observation_size
 
         if offset < 0:
             # Less data than observation_size
             observation_zeros = np.zeros([5, abs(offset)])
             offset = 0
 
+        # ensure most recent OHLC data is first
         observation = np.array([
             self.normalized_asset_data.loc[
-                offset: self.current_step, 'open'].values,
+                offset: self.current_step]['open'].values,
             self.normalized_asset_data.loc[
-                offset: self.current_step, 'high'].values,
+                offset: self.current_step]['high'].values,
             self.normalized_asset_data.loc[
-                offset: self.current_step, 'low'].values,
+                offset: self.current_step]['low'].values,
             self.normalized_asset_data.loc[
-                offset: self.current_step, 'close'].values,
+                offset: self.current_step]['close'].values,
             self.normalized_asset_data.loc[
-                offset: self.current_step, 'volume'].values,
+                offset: self.current_step]['volume'].values,
         ])
 
         if observation.shape[1] < self.observation_size:
