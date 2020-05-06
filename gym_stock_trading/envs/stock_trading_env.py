@@ -28,13 +28,12 @@ class Chart():
     made to render StockTrading OpenAI Gym Environment
     """
 
-    def __init__(self, asset_data, title=None):
+    def __init__(self, asset_data):
         self.asset_data = asset_data
         self.account_values = np.zeros(len(self.asset_data))
 
-        # Create a figure on screen and set the title
+        # Create a figure on screen
         self.fig = plt.figure()
-        self.fig.suptitle(title)
 
         # Create top subplot for account value axis
         self.account_value_ax = plt.subplot2grid(
@@ -108,13 +107,12 @@ class Chart():
         last_date = self._date2num(
             self.asset_data['timestamp'].values[current_step])
         last_close = self.asset_data['close'].values[current_step]
-        last_high = self.asset_data['high'].values[current_step]
 
-        # Print the current price to the price axis
+        # Print the close price to the price axis
         self.price_ax.annotate(
             '{0:.2f}'.format(last_close),
             (last_date, last_close),
-            xytext=(last_date, last_high),
+            xytext=(last_date, last_close),
             bbox=dict(boxstyle='round', fc='w', ec='k', lw=1),
             color="black",
             fontsize="small"
@@ -150,7 +148,7 @@ class Chart():
         for step, position in enumerate(positions):
             if step in step_range:
                 date = self._date2num(
-                    self.asset_data['timestamp'].values[step])
+                    self.asset_data['timestamp'].values[step-1])
                 high = self.asset_data['high'].values[step]
                 low = self.asset_data['low'].values[step]
 
@@ -181,13 +179,14 @@ class Chart():
         return mdates.datestr2num(date)
 
     def render(self, current_step, account_value, positions, window_size=40):
+        # Env is one step ahead of observation
+        # current_step -= 1
         self.account_values[current_step] = account_value
 
         window_start = max(current_step - window_size, 0)
         step_range = range(window_start, current_step + 1)
 
-        if self.fig.suptitle is None:
-            self.fig.suptitle(positions[current_step])
+        self.fig.suptitle(positions[current_step])
 
         # Format dates as timestamps, necessary for candlestick graph
         dates = np.array(
@@ -507,12 +506,11 @@ class StockTradingEnv(gym.Env):
         if self.visualization is None:
             self.visualization = Chart(self.asset_data)
 
-        if self.current_step > LOOKBACK_WINDOW_SIZE:
-            self.visualization.render(
-                self.current_step,
-                self.equity[-1],
-                self.positions,
-                window_size=LOOKBACK_WINDOW_SIZE)
+        self.visualization.render(
+            self.current_step,
+            self.equity[-1],
+            self.positions,
+            window_size=LOOKBACK_WINDOW_SIZE)
 
     def close(self):
         pass
