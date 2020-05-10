@@ -3,6 +3,8 @@ This module is a stock trading environment for OpenAI gym
 including matplotlib visualizations.
 """
 import datetime
+import os
+import random
 
 import gym
 import matplotlib
@@ -263,17 +265,18 @@ class StockTradingEnv(gym.Env):
     metadata = {'render.modes': ['human']}
     visualization = None
 
-    def __init__(self, path, observation_size=1, volume_enabled=True, allotted_amount=10000.0):
+    def __init__(self, filepath, observation_size=1, volume_enabled=True,
+                 allotted_amount=10000.0):
         super(StockTradingEnv, self).__init__()
 
         self.current_step = 0
 
-        self.path = path
+        self.path = filepath
         self.volume_enabled = volume_enabled
         self.asset_data = None
         self.normalized_asset_data = None
-        self.previous_close = None
-        self.daily_avg_volume = None
+        # self.previous_close = None
+        # self.daily_avg_volume = None
         self.observation_size = observation_size
 
         self.base_value = allotted_amount
@@ -317,10 +320,9 @@ class StockTradingEnv(gym.Env):
 
         return normalized_dataframe
 
-    def _initialize_data(self):
+    def _initialize_data(self, filename):
         """Initializes environment data from files in path"""
 
-        filename = ''
         while filename[-4:] != '.csv':
             # get random data file
             filename = random.choice(os.listdir(self.path))
@@ -328,13 +330,6 @@ class StockTradingEnv(gym.Env):
         # convert to data frame
         asset_data = pd.read_csv(self.path + filename)
 
-        with open(self.path + filename[:-4] + '-prev_close.txt') as f:
-            content = f.read()
-        prev_close = float(content)
-
-
-        self.previous_close = previous_close
-        self.daily_avg_volume = daily_avg_volume
         self.asset_data = asset_data
         self.normalized_asset_data = self._normalize_data()
 
@@ -516,11 +511,11 @@ class StockTradingEnv(gym.Env):
 
         return obs, reward, done, {}
 
-    def reset(self):
+    def reset(self, filename=''):
         """Reset the state of the environment to an initial state"""
         self.current_step = 0
 
-        self._initialize_data()
+        self._initialize_data(filename)
 
         self.equity = [self.base_value]
         self.profit_loss = [0.0]

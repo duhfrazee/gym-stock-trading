@@ -7,11 +7,14 @@ import pandas as pd
 
 class TestStockTradingEnv(unittest.TestCase):
     def setUp(self):
-        self.env = gym.make('gym_stock_trading:StockTrading-v0')
-        self.previous_close = 291.81
-        self.daily_avg_volume = 18840000
         self.path = '/Users/d/Documents/Projects/Python/gym-env/data/TSLA/'
+        self.env = gym.make(
+            'gym_stock_trading:StockTrading-v0', filepath=self.path)
+
         self.filename = 'TSLA2019-04-04.csv'
+
+        highest_price = 271.2
+        highest_volume = 706650
 
         step0_open = 261.89
         step0_high = 262.77
@@ -20,11 +23,11 @@ class TestStockTradingEnv(unittest.TestCase):
         step0_volume = 706650
 
         self.correct_step0_obs = np.array([
-            [step0_open / (2 * self.previous_close)],
-            [step0_high / (2 * self.previous_close)],
-            [step0_low / (2 * self.previous_close)],
-            [step0_close / (2 * self.previous_close)],
-            [step0_volume * 10 / self.daily_avg_volume]
+            [step0_open / highest_price],
+            [step0_high / highest_price],
+            [step0_low / highest_price],
+            [step0_close / highest_price],
+            [step0_volume / highest_volume]
         ])
 
         step1_open = 261.68
@@ -34,11 +37,11 @@ class TestStockTradingEnv(unittest.TestCase):
         step1_volume = 378093
 
         self.correct_step1_obs = np.array([
-            [step1_open / (2 * self.previous_close)],
-            [step1_high / (2 * self.previous_close)],
-            [step1_low / (2 * self.previous_close)],
-            [step1_close / (2 * self.previous_close)],
-            [step1_volume * 10 / self.daily_avg_volume]
+            [step1_open / highest_price],
+            [step1_high / highest_price],
+            [step1_low / highest_price],
+            [step1_close / highest_price],
+            [step1_volume / highest_volume]
         ])
 
         step2_open = 263.425
@@ -48,11 +51,11 @@ class TestStockTradingEnv(unittest.TestCase):
         step2_volume = 369398
 
         self.correct_step2_obs = np.array([
-            [step2_open / (2 * self.previous_close)],
-            [step2_high / (2 * self.previous_close)],
-            [step2_low / (2 * self.previous_close)],
-            [step2_close / (2 * self.previous_close)],
-            [step2_volume * 10 / self.daily_avg_volume]
+            [step2_open / highest_price],
+            [step2_high / highest_price],
+            [step2_low / highest_price],
+            [step2_close / highest_price],
+            [step2_volume / highest_volume]
         ])
 
         laststep_open = 267.78
@@ -62,11 +65,11 @@ class TestStockTradingEnv(unittest.TestCase):
         laststep_volume = 4627
 
         self.correct_laststep_obs = np.array([
-            [laststep_open / (2 * self.previous_close)],
-            [laststep_high / (2 * self.previous_close)],
-            [laststep_low / (2 * self.previous_close)],
-            [laststep_close / (2 * self.previous_close)],
-            [laststep_volume * 10 / self.daily_avg_volume]
+            [laststep_open / highest_price],
+            [laststep_high / highest_price],
+            [laststep_low / highest_price],
+            [laststep_close / highest_price],
+            [laststep_volume / highest_volume]
         ])
 
     def test_inititalize_env(self):
@@ -81,8 +84,6 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertEqual(self.env.current_step, 0)
         self.assertEqual(self.env.asset_data, None)
         self.assertEqual(self.env.normalized_asset_data, None)
-        self.assertEqual(self.env.previous_close, None)
-        self.assertEqual(self.env.daily_avg_volume, None)
         self.assertEqual(self.env.observation_size, 1)
         self.assertEqual(self.env.base_value, 10000)
         self.assertEqual(initial_equity, self.env.base_value)
@@ -93,11 +94,7 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertEqual(max_qty, None)
 
     def test_default_reset(self):
-        obs = self.env.reset(
-            self._initialize_data(),
-            self.previous_close,
-            self.daily_avg_volume
-        )
+        obs = self._reset_env()
 
         initial_equity = self.env.equity[-1]
         profit_loss = self.env.profit_loss[-1]
@@ -107,8 +104,6 @@ class TestStockTradingEnv(unittest.TestCase):
         max_qty = self.env.max_qty
 
         self.assertEqual(self.env.current_step, 0)
-        self.assertEqual(self.env.previous_close, self.previous_close)
-        self.assertEqual(self.env.daily_avg_volume, self.daily_avg_volume)
         self.assertEqual(self.env.observation_size, 1)
         self.assertEqual(self.env.base_value, 10000)
         self.assertEqual(initial_equity, self.env.base_value)
@@ -124,13 +119,12 @@ class TestStockTradingEnv(unittest.TestCase):
 
         for i in range(2, 11):
             self.env = gym.make(
-                'gym_stock_trading:StockTrading-v0', observation_size=i)
-
-            obs = self.env.reset(
-                self._initialize_data(),
-                self.previous_close,
-                self.daily_avg_volume
+                'gym_stock_trading:StockTrading-v0',
+                filepath=self.path,
+                observation_size=i
             )
+
+            obs = self._reset_env()
 
             initial_equity = self.env.equity[-1]
             profit_loss = self.env.profit_loss[-1]
@@ -140,8 +134,6 @@ class TestStockTradingEnv(unittest.TestCase):
             max_qty = self.env.max_qty
 
             self.assertEqual(self.env.current_step, 0)
-            self.assertEqual(self.env.previous_close, self.previous_close)
-            self.assertEqual(self.env.daily_avg_volume, self.daily_avg_volume)
             self.assertEqual(self.env.observation_size, i)
             self.assertEqual(self.env.base_value, 10000)
             self.assertEqual(initial_equity, self.env.base_value)
@@ -162,13 +154,12 @@ class TestStockTradingEnv(unittest.TestCase):
 
         for i in range(2, 11):
             self.env = gym.make(
-                'gym_stock_trading:StockTrading-v0', observation_size=i)
-
-            _ = self.env.reset(
-                self._initialize_data(),
-                self.previous_close,
-                self.daily_avg_volume
+                'gym_stock_trading:StockTrading-v0',
+                filepath=self.path,
+                observation_size=i
             )
+
+            _ = self._reset_env()
 
             # Go long 50%
             action = np.array([0.5])
@@ -187,13 +178,12 @@ class TestStockTradingEnv(unittest.TestCase):
 
         for obs_size in range(2, 11):
             self.env = gym.make(
-                'gym_stock_trading:StockTrading-v0', observation_size=obs_size)
-
-            obs = self.env.reset(
-                self._initialize_data(),
-                self.previous_close,
-                self.daily_avg_volume
+                'gym_stock_trading:StockTrading-v0',
+                filepath=self.path,
+                observation_size=obs_size
             )
+
+            obs = self._reset_env()
 
             correct_obs_zeros = np.zeros([5, obs_size-1])
             correct_obs = np.concatenate(
@@ -235,11 +225,7 @@ class TestStockTradingEnv(unittest.TestCase):
                 self.assertEqual(observation_.shape[1], obs_size)
 
     def test_simple_long_trade_of_50_percent(self):
-        _ = self.env.reset(
-            self._initialize_data(),
-            self.previous_close,
-            self.daily_avg_volume
-        )
+        _ = self._reset_env()
 
         # Go long 50%
         action = np.array([0.5])
@@ -261,11 +247,7 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertAlmostEqual(self.env.equity[-1], 10000.0 + correct_reward)
 
     def test_simple_short_trade_of_50_percent(self):
-        _ = self.env.reset(
-            self._initialize_data(),
-            self.previous_close,
-            self.daily_avg_volume
-        )
+        _ = self._reset_env()
 
         # Go short 50%
         action = np.array([-0.5])
@@ -287,11 +269,7 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertAlmostEqual(self.env.equity[-1], 10000.0 + correct_reward)
 
     def test_simple_long_trade_of_65_percent(self):
-        _ = self.env.reset(
-            self._initialize_data(),
-            self.previous_close,
-            self.daily_avg_volume
-        )
+        _ = self._reset_env()
 
         # Go long 65%
         action = np.array([0.65])
@@ -313,11 +291,7 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertAlmostEqual(self.env.equity[-1], 10000.0 + correct_reward)
 
     def test_simple_short_trade_of_65_percent(self):
-        _ = self.env.reset(
-            self._initialize_data(),
-            self.previous_close,
-            self.daily_avg_volume
-        )
+        _ = self._reset_env()
 
         # Go short 65%
         action = np.array([-0.65])
@@ -339,11 +313,7 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertAlmostEqual(self.env.equity[-1], 10000.0 + correct_reward)
 
     def test_simple_long_trade_of_100_percent(self):
-        _ = self.env.reset(
-            self._initialize_data(),
-            self.previous_close,
-            self.daily_avg_volume
-        )
+        _ = self._reset_env()
 
         # Go long 100%
         action = np.array([1.0])
@@ -365,11 +335,7 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertAlmostEqual(self.env.equity[-1], 10000.0 + correct_reward)
 
     def test_simple_short_trade_of_100_percent(self):
-        _ = self.env.reset(
-            self._initialize_data(),
-            self.previous_close,
-            self.daily_avg_volume
-        )
+        _ = self._reset_env()
 
         # Go short 100%
         action = np.array([-1.0])
@@ -391,11 +357,7 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertAlmostEqual(self.env.equity[-1], 10000.0 + correct_reward)
 
     def test_add_to_long_position(self):
-        _ = self.env.reset(
-            self._initialize_data(),
-            self.previous_close,
-            self.daily_avg_volume
-        )
+        _ = self._reset_env()
 
         # Go long 50%
         action1 = np.array([0.5])
@@ -425,11 +387,7 @@ class TestStockTradingEnv(unittest.TestCase):
             self.env.equity[-1], cash + curr_stock_value + correct_reward)
 
     def test_add_to_short_position(self):
-        _ = self.env.reset(
-            self._initialize_data(),
-            self.previous_close,
-            self.daily_avg_volume
-        )
+        _ = self._reset_env()
 
         # Go short 50%
         action1 = np.array([-0.5])
@@ -460,11 +418,7 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertAlmostEqual(self.env.positions[-1][1], correct_position[1])
 
     def test_reduce_long_position(self):
-        _ = self.env.reset(
-            self._initialize_data(),
-            self.previous_close,
-            self.daily_avg_volume
-        )
+        _ = self._reset_env()
 
         # Go long 50%
         action1 = np.array([0.5])
@@ -495,11 +449,7 @@ class TestStockTradingEnv(unittest.TestCase):
             self.env.positions[-1][1], correct_position[1])
 
     def test_reduce_short_position(self):
-        _ = self.env.reset(
-            self._initialize_data(),
-            self.previous_close,
-            self.daily_avg_volume
-        )
+        _ = self._reset_env()
 
         # Go short 50%
         action1 = np.array([-0.5])
@@ -531,11 +481,7 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertAlmostEqual(self.env.positions[-1][1], correct_position[1])
 
     def test_close_long_position(self):
-        _ = self.env.reset(
-            self._initialize_data(),
-            self.previous_close,
-            self.daily_avg_volume
-        )
+        _ = self._reset_env()
 
         # Go long 50%
         action1 = np.array([0.5])
@@ -565,11 +511,7 @@ class TestStockTradingEnv(unittest.TestCase):
             self.env.positions[-1][1], correct_position[1])
 
     def test_close_short_position(self):
-        _ = self.env.reset(
-            self._initialize_data(),
-            self.previous_close,
-            self.daily_avg_volume
-        )
+        _ = self._reset_env()
 
         # Go short 50%
         action1 = np.array([-0.5])
@@ -599,11 +541,7 @@ class TestStockTradingEnv(unittest.TestCase):
             self.env.positions[-1][1], correct_position[1])
 
     def test_cross_from_long_to_short(self):
-        _ = self.env.reset(
-            self._initialize_data(),
-            self.previous_close,
-            self.daily_avg_volume
-        )
+        _ = self._reset_env()
 
         # Go long 50%
         action1 = np.array([0.5])
@@ -633,11 +571,7 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertAlmostEqual(self.env.positions[-1][1], correct_position[1])
 
     def test_cross_from_short_to_long(self):
-        _ = self.env.reset(
-            self._initialize_data(),
-            self.previous_close,
-            self.daily_avg_volume
-        )
+        _ = self._reset_env()
 
         # Go short 50%
         action1 = np.array([-0.5])
@@ -667,11 +601,7 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertAlmostEqual(self.env.positions[-1][1], correct_position[1])
 
     def test_stay_long_50_percent_entire_episode(self):
-        _ = self.env.reset(
-            self._initialize_data(),
-            self.previous_close,
-            self.daily_avg_volume
-        )
+        _ = self._reset_env()
 
         # Go long 50%
         action = np.array([0.5])
@@ -698,11 +628,7 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertAlmostEqual(self.env.equity[-1], cash + curr_stock_value)
 
     def test_stay_short_50_percent_entire_episode(self):
-        _ = self.env.reset(
-            self._initialize_data(),
-            self.previous_close,
-            self.daily_avg_volume
-        )
+        _ = self._reset_env()
 
         # Go short 50%
         action = np.array([-0.5])
@@ -744,6 +670,9 @@ class TestStockTradingEnv(unittest.TestCase):
 
     def _calculate_short_equity_value(self, shares, avg_price, curr_price):
         return abs(shares) * (avg_price - (curr_price - avg_price))
+
+    def _reset_env(self):
+        return self.env.reset(self.filename)
 
 
 if __name__ == '__main__':
