@@ -296,26 +296,47 @@ class StockTradingEnv(gym.Env):
     def _normalize_data(self):
         normalized_dataframe = self.asset_data.copy()
 
+        highest_price = max(self.asset_data['high'])
+        highest_volume = max(self.asset_data['volume'])
+
         normalized_dataframe['open'] =\
-            normalized_dataframe['open'] / (2 * self.previous_close)
+            normalized_dataframe['open'] / highest_price
 
         normalized_dataframe['high'] =\
-            normalized_dataframe['high'] / (2 * self.previous_close)
+            normalized_dataframe['high'] / highest_price
 
         normalized_dataframe['low'] =\
-            normalized_dataframe['low'] / (2 * self.previous_close)
+            normalized_dataframe['low'] / highest_price
 
         normalized_dataframe['close'] =\
-            normalized_dataframe['close'] / (2 * self.previous_close)
+            normalized_dataframe['close'] / highest_price
 
         # Potential bug if volume in one minute is 1/10 of average daily volume
         normalized_dataframe['volume'] =\
-            normalized_dataframe['volume'] * 10 / self.daily_avg_volume
+            normalized_dataframe['volume'] / highest_volume
 
         return normalized_dataframe
 
     def _initialize_data(self):
-        pass
+        """Initializes environment data from files in path"""
+
+        filename = ''
+        while filename[-4:] != '.csv':
+            # get random data file
+            filename = random.choice(os.listdir(self.path))
+
+        # convert to data frame
+        asset_data = pd.read_csv(self.path + filename)
+
+        with open(self.path + filename[:-4] + '-prev_close.txt') as f:
+            content = f.read()
+        prev_close = float(content)
+
+
+        self.previous_close = previous_close
+        self.daily_avg_volume = daily_avg_volume
+        self.asset_data = asset_data
+        self.normalized_asset_data = self._normalize_data()
 
     def _next_observation(self):
         """Get the stock data for the current observation size."""
@@ -495,14 +516,11 @@ class StockTradingEnv(gym.Env):
 
         return obs, reward, done, {}
 
-    def reset(self, asset_data, previous_close, daily_avg_volume):
+    def reset(self):
         """Reset the state of the environment to an initial state"""
         self.current_step = 0
 
-        self.previous_close = previous_close
-        self.daily_avg_volume = daily_avg_volume
-        self.asset_data = asset_data
-        self.normalized_asset_data = self._normalize_data()
+        self._initialize_data()
 
         self.equity = [self.base_value]
         self.profit_loss = [0.0]
