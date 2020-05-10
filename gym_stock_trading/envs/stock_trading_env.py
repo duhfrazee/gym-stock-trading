@@ -263,11 +263,13 @@ class StockTradingEnv(gym.Env):
     metadata = {'render.modes': ['human']}
     visualization = None
 
-    def __init__(self, observation_size=1, allotted_amount=10000.0):
+    def __init__(self, path, observation_size=1, volume_enabled=True, allotted_amount=10000.0):
         super(StockTradingEnv, self).__init__()
 
         self.current_step = 0
 
+        self.path = path
+        self.volume_enabled = volume_enabled
         self.asset_data = None
         self.normalized_asset_data = None
         self.previous_close = None
@@ -311,6 +313,9 @@ class StockTradingEnv(gym.Env):
             normalized_dataframe['volume'] * 10 / self.daily_avg_volume
 
         return normalized_dataframe
+
+    def _initialize_data(self):
+        pass
 
     def _next_observation(self):
         """Get the stock data for the current observation size."""
