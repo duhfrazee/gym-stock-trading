@@ -84,6 +84,7 @@ class TestStockTradingEnv(unittest.TestCase):
         max_qty = self.env.max_qty
 
         self.assertEqual(self.env.current_step, 0)
+        self.assertEqual(self.env.current_episode, 0)
         self.assertEqual(self.env.asset_data, None)
         self.assertEqual(self.env.normalized_asset_data, None)
         self.assertEqual(self.env.observation_size, 1)
