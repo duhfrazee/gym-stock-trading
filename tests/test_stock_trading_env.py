@@ -1,4 +1,5 @@
 import unittest
+import os
 
 import gym
 import numpy as np
@@ -7,7 +8,8 @@ import pandas as pd
 
 class TestStockTradingEnv(unittest.TestCase):
     def setUp(self):
-        self.path = '/Users/d/Documents/Projects/Python/gym-env/data/TSLA/'
+        self.path =\
+            '/Users/d/Documents/Projects/Python/openai/gym-stock-trading/tests/test_data/'
         self.env = gym.make(
             'gym_stock_trading:StockTrading-v0', filepath=self.path)
 
@@ -654,6 +656,27 @@ class TestStockTradingEnv(unittest.TestCase):
             19, 261.625, 267.64)
         self.assertEqual(self.env.cash[-1], cash)
         self.assertAlmostEqual(self.env.equity[-1], cash + curr_stock_value)
+
+    def test_sequential_data_initialization(self):
+        env = gym.make(
+            'gym_stock_trading:StockTrading-v0',
+            filepath=self.path,
+            random_data_selection=False
+        )
+
+        for i in range(102):
+            directory_size = len(os.listdir(self.path))
+            directory = sorted(os.listdir(self.path))
+
+            correct_file = directory[i % directory_size]
+
+            if correct_file[-4:] != '.csv':
+                i -= 1
+                continue
+
+            env.reset()
+
+            self.assertEqual(env.filename, correct_file)
 
     def _initialize_data(self):
 

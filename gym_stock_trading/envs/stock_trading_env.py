@@ -266,13 +266,17 @@ class StockTradingEnv(gym.Env):
     visualization = None
 
     def __init__(self, filepath, observation_size=1, volume_enabled=True,
-                 allotted_amount=10000.0):
+                 random_data_selection=True, allotted_amount=10000.0):
         super(StockTradingEnv, self).__init__()
 
         self.current_step = 0
+        self.current_episode = 0
 
         self.path = filepath
+        self.filename = ''
+        self.current_filename = ''
         self.volume_enabled = volume_enabled
+        self.random_data_selection = random_data_selection
         self.asset_data = None
         self.normalized_asset_data = None
         # self.previous_close = None
@@ -314,7 +318,6 @@ class StockTradingEnv(gym.Env):
         normalized_dataframe['close'] =\
             normalized_dataframe['close'] / highest_price
 
-        # Potential bug if volume in one minute is 1/10 of average daily volume
         normalized_dataframe['volume'] =\
             normalized_dataframe['volume'] / highest_volume
 
@@ -323,13 +326,24 @@ class StockTradingEnv(gym.Env):
     def _initialize_data(self, filename):
         """Initializes environment data from files in path"""
 
-        while filename[-4:] != '.csv':
-            # get random data file
+        if self.random_data_selection and filename == '':
             filename = random.choice(os.listdir(self.path))
 
-        # convert to data frame
+        elif not self.random_data_selection and filename == '':
+            if self.current_episode >= len(os.listdir(self.path)):
+                self.current_episode = 0
+
+            filename = sorted(os.listdir(self.path))[self.current_episode]
+
+        if filename[-4:] != '.csv':
+            self._initialize_data('')
+
+        self.current_episode += 1
+
+        # Convert to data frame
         asset_data = pd.read_csv(self.path + filename)
 
+        self.filename = filename
         self.asset_data = asset_data
         self.normalized_asset_data = self._normalize_data()
 
@@ -340,7 +354,10 @@ class StockTradingEnv(gym.Env):
 
         if offset < 0:
             # Less data than observation_size
-            observation_zeros = np.zeros([5, abs(offset)])
+            if self.volume_enabled:
+                observation_zeros = np.zeros([5, abs(offset)])
+            # else:
+            #     observation_zeros = np.zeros([4, abs(offset)])
             offset = 0
 
         # ensure most recent OHLC data is first
@@ -354,8 +371,15 @@ class StockTradingEnv(gym.Env):
             self.normalized_asset_data.loc[
                 offset: self.current_step]['close'].values,
             self.normalized_asset_data.loc[
-                offset: self.current_step]['volume'].values,
+                offset: self.current_step]['volume'].values
         ])
+
+        # if self.volume_enabled:
+        #     observation = np.append(
+        #         observation,
+        #         self.normalized_asset_data.loc[
+        #             offset: self.current_step]['volume'].values
+        #     )
 
         if observation.shape[1] < self.observation_size:
             observation = np.concatenate(
