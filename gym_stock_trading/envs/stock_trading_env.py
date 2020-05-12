@@ -6,6 +6,7 @@ import datetime
 import os
 import random
 
+import alpaca_trade_api as tradeapi
 import gym
 import matplotlib
 import matplotlib.pyplot as plt
@@ -13,6 +14,7 @@ import matplotlib.dates as mdates
 import numpy as np
 import pandas as pd
 
+from datetime import timedelta
 from gym import error, spaces, utils
 from gym.utils import seeding
 from mplfinance.original_flavor import candlestick_ochl as candlestick
@@ -23,6 +25,12 @@ UP_COLOR = '#27A59A'
 DOWN_COLOR = '#EF534F'
 UP_TEXT_COLOR = '#73D3CC'
 DOWN_TEXT_COLOR = '#DC2C27'
+
+PAPER_APCA_API_KEY_ID = os.environ['PAPER_APCA_API_KEY_ID']
+PAPER_APCA_API_SECRET_KEY = os.environ['PAPER_APCA_API_SECRET_KEY']
+PAPER_APCA_API_BASE_URL = 'https://paper-api.alpaca.markets'
+LIVE_APCA_API_KEY_ID = os.environ['LIVE_APCA_API_KEY_ID']
+LIVE_APCA_API_SECRET_KEY = os.environ['LIVE_APCA_API_SECRET_KEY']
 
 
 class Chart():
@@ -265,22 +273,29 @@ class StockTradingEnv(gym.Env):
     metadata = {'render.modes': ['human']}
     visualization = None
 
-    def __init__(self, filepath, observation_size=1, volume_enabled=True,
+    def __init__(self, mode='backtest', symbol=None, filepath=None,
+                 observation_size=1, volume_enabled=True,
                  random_data_selection=True, allotted_amount=10000.0):
         super(StockTradingEnv, self).__init__()
 
         self.current_step = 0
         self.current_episode = 0
 
-        self.path = filepath
-        self.filename = ''
-        self.current_filename = ''
+        self.mode = mode
+
+        if self.mode == 'backtest':
+            self.path = filepath
+            self.filename = ''
+            self.current_filename = ''
+        else:
+            self.symbol = symbol
+
         self.volume_enabled = volume_enabled
         self.random_data_selection = random_data_selection
         self.asset_data = None
         self.normalized_asset_data = None
-        # self.previous_close = None
-        # self.daily_avg_volume = None
+        self.previous_close = None
+        self.daily_avg_volume = None
         self.observation_size = observation_size
 
         self.base_value = allotted_amount
@@ -299,6 +314,24 @@ class StockTradingEnv(gym.Env):
         # Normalized values for: Open, High, Low, Close, Volume
         self.observation_space = spaces.Box(
             low=0, high=1, shape=(5, observation_size), dtype=np.float16)
+
+        self.paper = tradeapi.REST(
+            PAPER_APCA_API_KEY_ID,
+            PAPER_APCA_API_SECRET_KEY,
+            PAPER_APCA_API_BASE_URL,
+            api_version='v2'
+        )
+
+        self.live = tradeapi.REST(
+            LIVE_APCA_API_KEY_ID,
+            LIVE_APCA_API_SECRET_KEY,
+            api_version='v2'
+        )
+
+        self.live_conn = tradeapi.StreamConn(
+            LIVE_APCA_API_KEY_ID,
+            LIVE_APCA_API_SECRET_KEY
+        )
 
     def _normalize_data(self):
         normalized_dataframe = self.asset_data.copy()
@@ -323,9 +356,7 @@ class StockTradingEnv(gym.Env):
 
         return normalized_dataframe
 
-    def _initialize_data(self, filename):
-        """Initializes environment data from files in path"""
-
+    def _initialize_backtest_data(self, filename):
         files = os.listdir(self.path)
         files = [fi for fi in files if fi.endswith(".csv")]
 
@@ -350,8 +381,55 @@ class StockTradingEnv(gym.Env):
         self.asset_data = asset_data
         self.normalized_asset_data = self._normalize_data()
 
+    def _initialize_live_data(self):
+        market = self.live.get_clock()
+
+        if market.is_open:
+            _open = int(
+                datetime.datetime.combine(
+                    datetime.date.today(),
+                    datetime.time(9, 30)).timestamp() * 1000
+                )
+        else:
+            _open = int(market.next_open.timestamp() * 1000)
+
+        close = int(market.next_close.timestamp() * 1000)
+
+        # TODO need to ensure the open/close times are sent in EDT
+        self.asset_data = self.live.polygon.historic_agg_v2(
+            self.symbol, 1, 'minute', _open, close).df
+
+        # TODO 'yesterday' could cause a bug if run aftermarket
+        yesterday = datetime.date.today() - timedelta(days=1)
+        today = datetime.date.today()
+        self.previous_close = self.live.polygon.historic_agg_v2(
+            self.symbol, 1, 'day', yesterday, today).df['close'][0]
+
+        today_minus_30 = datetime.date.today() - timedelta(days=30)
+        if self.volume_enabled:
+            self.daily_avg_volume = int(self.live.polygon.historic_agg_v2(
+                'MSFT', 1, 'day', today_minus_30, today).df['volume'].mean())
+
+    def _initialize_data(self, filename):
+        """Initializes environment data from files in path"""
+
+        if self.mode == 'backtest':
+            self._initialize_backtest_data(filename)
+        else:
+            self._initialize_live_data()
+
     def _next_observation(self):
         """Get the stock data for the current observation size."""
+
+        if self.mode != 'backtest':
+            # check if market open
+            # while: print waiting for market to open
+            # at 9:30AM EDT, subscribe to polygon websocket
+            # get first bar
+            # convert to dataframe
+            # append to dataframe
+            # normalize data
+            pass
 
         offset = self.current_step+1 - self.observation_size
 
@@ -359,11 +437,10 @@ class StockTradingEnv(gym.Env):
             # Less data than observation_size
             if self.volume_enabled:
                 observation_zeros = np.zeros([5, abs(offset)])
-            # else:
-            #     observation_zeros = np.zeros([4, abs(offset)])
+            else:
+                observation_zeros = np.zeros([4, abs(offset)])
             offset = 0
 
-        # ensure most recent OHLC data is first
         observation = np.array([
             self.normalized_asset_data.loc[
                 offset: self.current_step]['open'].values,
@@ -372,17 +449,15 @@ class StockTradingEnv(gym.Env):
             self.normalized_asset_data.loc[
                 offset: self.current_step]['low'].values,
             self.normalized_asset_data.loc[
-                offset: self.current_step]['close'].values,
-            self.normalized_asset_data.loc[
-                offset: self.current_step]['volume'].values
+                offset: self.current_step]['close'].values
         ])
 
-        # if self.volume_enabled:
-        #     observation = np.append(
-        #         observation,
-        #         self.normalized_asset_data.loc[
-        #             offset: self.current_step]['volume'].values
-        #     )
+        if self.volume_enabled:
+            observation = np.vstack((
+                observation,
+                self.normalized_asset_data.loc[
+                    offset: self.current_step]['volume'].values
+            ))
 
         if observation.shape[1] < self.observation_size:
             observation = np.concatenate(
@@ -521,20 +596,26 @@ class StockTradingEnv(gym.Env):
 
         self.current_step += 1
 
+        obs = self._next_observation()
+
         next_price = self.asset_data.iloc[self.current_step]['close']
 
         reward = (next_price - curr_price) * self.positions[-1][0]
         self.equity[-1] += reward
         self.rewards.append(reward)
 
-        # Episode ends when down 5% or DataFrame ends
-        if self.current_step + 1 == len(self.asset_data):
-            done = True
+        if self.mode == 'backtest':
+            # Episode ends when down 5% or DataFrame ends
+            if self.current_step + 1 == len(self.asset_data):
+                done = True
+            else:
+                done = True if self.equity[-1] / self.base_value <= -0.05\
+                            else False
         else:
-            done = True if self.equity[-1] / self.base_value <= -0.05\
-                        else False
-
-        obs = self._next_observation()
+            # this needs to be robust on when an algo should close positions and end
+            # could be time of day, before market close
+            # could be down a certain percentage
+            pass
 
         return obs, reward, done, {}
 
