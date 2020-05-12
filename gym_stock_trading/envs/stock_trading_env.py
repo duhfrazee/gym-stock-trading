@@ -5,6 +5,8 @@ including matplotlib visualizations.
 import datetime
 import os
 import random
+import threading
+import time
 
 import alpaca_trade_api as tradeapi
 import gym
@@ -26,11 +28,14 @@ DOWN_COLOR = '#EF534F'
 UP_TEXT_COLOR = '#73D3CC'
 DOWN_TEXT_COLOR = '#DC2C27'
 
-PAPER_APCA_API_KEY_ID = os.environ['PAPER_APCA_API_KEY_ID']
-PAPER_APCA_API_SECRET_KEY = os.environ['PAPER_APCA_API_SECRET_KEY']
-PAPER_APCA_API_BASE_URL = 'https://paper-api.alpaca.markets'
-LIVE_APCA_API_KEY_ID = os.environ['LIVE_APCA_API_KEY_ID']
-LIVE_APCA_API_SECRET_KEY = os.environ['LIVE_APCA_API_SECRET_KEY']
+try:
+    PAPER_APCA_API_KEY_ID = os.environ['PAPER_APCA_API_KEY_ID']
+    PAPER_APCA_API_SECRET_KEY = os.environ['PAPER_APCA_API_SECRET_KEY']
+    PAPER_APCA_API_BASE_URL = 'https://paper-api.alpaca.markets'
+    LIVE_APCA_API_KEY_ID = os.environ['LIVE_APCA_API_KEY_ID']
+    LIVE_APCA_API_SECRET_KEY = os.environ['LIVE_APCA_API_SECRET_KEY']
+except KeyError:
+    pass
 
 
 class Chart():
@@ -289,6 +294,25 @@ class StockTradingEnv(gym.Env):
             self.current_filename = ''
         else:
             self.symbol = symbol
+            self.market = None
+
+            self.paper = tradeapi.REST(
+                PAPER_APCA_API_KEY_ID,
+                PAPER_APCA_API_SECRET_KEY,
+                PAPER_APCA_API_BASE_URL,
+                api_version='v2'
+            )
+
+            self.live = tradeapi.REST(
+                LIVE_APCA_API_KEY_ID,
+                LIVE_APCA_API_SECRET_KEY,
+                api_version='v2'
+            )
+
+            self.live_conn = tradeapi.StreamConn(
+                LIVE_APCA_API_KEY_ID,
+                LIVE_APCA_API_SECRET_KEY
+            )
 
         self.volume_enabled = volume_enabled
         self.random_data_selection = random_data_selection
@@ -314,24 +338,6 @@ class StockTradingEnv(gym.Env):
         # Normalized values for: Open, High, Low, Close, Volume
         self.observation_space = spaces.Box(
             low=0, high=1, shape=(5, observation_size), dtype=np.float16)
-
-        self.paper = tradeapi.REST(
-            PAPER_APCA_API_KEY_ID,
-            PAPER_APCA_API_SECRET_KEY,
-            PAPER_APCA_API_BASE_URL,
-            api_version='v2'
-        )
-
-        self.live = tradeapi.REST(
-            LIVE_APCA_API_KEY_ID,
-            LIVE_APCA_API_SECRET_KEY,
-            api_version='v2'
-        )
-
-        self.live_conn = tradeapi.StreamConn(
-            LIVE_APCA_API_KEY_ID,
-            LIVE_APCA_API_SECRET_KEY
-        )
 
     def _normalize_data(self):
         normalized_dataframe = self.asset_data.copy()
@@ -382,18 +388,18 @@ class StockTradingEnv(gym.Env):
         self.normalized_asset_data = self._normalize_data()
 
     def _initialize_live_data(self):
-        market = self.live.get_clock()
+        self.market = self.live.get_clock()
 
-        if market.is_open:
+        if self.market.is_open:
             _open = int(
                 datetime.datetime.combine(
                     datetime.date.today(),
                     datetime.time(9, 30)).timestamp() * 1000
                 )
         else:
-            _open = int(market.next_open.timestamp() * 1000)
+            _open = int(self.market.next_open.timestamp() * 1000)
 
-        close = int(market.next_close.timestamp() * 1000)
+        close = int(self.market.next_close.timestamp() * 1000)
 
         # TODO need to ensure the open/close times are sent in EDT
         self.asset_data = self.live.polygon.historic_agg_v2(
@@ -418,17 +424,27 @@ class StockTradingEnv(gym.Env):
         else:
             self._initialize_live_data()
 
+    def _await_market_open(self):
+        while not self.market.is_open:
+            print('Waiting for market to open...')
+            curr_time = datetime.datetime.today()
+            next_open = self.market.next_open
+            time.sleep((next_open-curr_time).seconds)
+            self.market = self.live.get_clock()
+
     def _next_observation(self):
         """Get the stock data for the current observation size."""
 
         if self.mode != 'backtest':
-            # check if market open
-            # while: print waiting for market to open
+            tAMO = threading.Thread(target=self._await_market_open)
+            tAMO.start()
+            tAMO.join()
+
             # at 9:30AM EDT, subscribe to polygon websocket
             # get first bar
             # convert to dataframe
             # append to dataframe
-            # normalize data
+            # normalize only new data
             pass
 
         offset = self.current_step+1 - self.observation_size
@@ -465,7 +481,33 @@ class StockTradingEnv(gym.Env):
 
         return observation
 
-    def _take_action(self, action):
+    def _submit_order(self, qty, order_type='market'):
+
+        side = 'buy' if qty > 0 else 'sell'
+
+        try:
+            if self.mode == 'live':
+                self.live.submit_order(
+                    symbol=self.symbol,
+                    qty=abs(qty),
+                    side=side,
+                    type=order_type,
+                    time_in_force='day'
+                )
+            elif self.mode == 'paper':
+                self.paper.submit_order(
+                    symbol=self.symbol,
+                    qty=abs(qty),
+                    side=side,
+                    type=order_type,
+                    time_in_force='day'
+                )
+
+            print("Market order of | " + str(qty) + " " + self.symbol + " " + side + " | completed.")
+        except:
+            print("Order of | " + str(qty) + " " +  self.symbol + " " + side + " | did not go through.")
+
+    def _take_backtest_action(self, action):
         curr_price = self.asset_data.iloc[self.current_step]['close']
 
         # Current position
@@ -514,7 +556,6 @@ class StockTradingEnv(gym.Env):
             self.positions.append(new_position)
             self.cash.append(self.cash[-1] - purchase_amount)
             self.equity.append(self.cash[-1] + purchase_amount)
-
         else:
             # Trade increases or reduces position (including closing out)
 
@@ -587,6 +628,142 @@ class StockTradingEnv(gym.Env):
                         + abs(net_qty)
                         * (avg_price - (curr_price - avg_price))
                     )
+
+    def _take_live_action(self, action):
+        curr_price = self.asset_data.iloc[self.current_step]['close']
+
+        # Current position
+        curr_qty, avg_price = self.positions[-1]
+        curr_invested = curr_qty / self.max_qty
+
+        if action == 0:
+            # Close position
+            trade_qty = -curr_qty
+        else:
+            target_change = action - curr_invested
+            trade_qty = int(target_change * self.equity[-1] / curr_price)
+
+        if curr_qty == 0:
+            # Simple short or long trade
+            purchase_amount = abs(trade_qty * curr_price)
+            new_position = (trade_qty, curr_price)
+            self.positions.append(new_position)
+            self.cash.append(self.cash[-1] - purchase_amount)
+            self.equity.append(self.cash[-1] + purchase_amount)
+            self.profit_loss.append(0.0)
+
+            if self.mode != 'backtest':
+                # Submit order
+                tOrder = threading.Thread(
+                    target=self._submit_order, args=[trade_qty])
+                tOrder.start()
+                # TODO determine if we can remove join for orders
+                tOrder.join()
+
+        elif curr_qty > 0 and curr_qty + trade_qty < 0 or\
+                curr_qty < 0 and curr_qty + trade_qty > 0:
+            # Trade crosses from short to long or long to short
+
+            # Close current position, update P/L and cash
+            if curr_qty > 0:
+                # Closing long position
+                self.cash.append(self.cash[-1] + curr_qty * curr_price)
+                self.profit_loss.append((curr_price - avg_price) * curr_qty)
+            else:
+                # Closing short position
+                self.cash.append(
+                    self.cash[-1]
+                    + abs(curr_qty)
+                    * (avg_price - (curr_price - avg_price))
+                )
+                self.profit_loss.append(
+                    (avg_price - curr_price) * abs(curr_qty))
+
+            # Simple short or long trade
+            trade_qty += curr_qty
+            purchase_amount = abs(trade_qty * curr_price)
+            new_position = (trade_qty, curr_price)
+            self.positions.append(new_position)
+            self.cash.append(self.cash[-1] - purchase_amount)
+            self.equity.append(self.cash[-1] + purchase_amount)
+        else:
+            # Trade increases or reduces position (including closing out)
+
+            if curr_qty > 0 and trade_qty > 0 or\
+                    curr_qty < 0 and trade_qty < 0:
+                # Adding to position
+
+                purchase_amount = abs(trade_qty * curr_price)
+
+                while self.cash[-1] < purchase_amount:
+                    # Descrease trade_qty if not enough cash
+                    trade_qty = trade_qty - 1 if trade_qty > 0\
+                            else trade_qty + 1
+                    purchase_amount = abs(trade_qty * curr_price)
+
+                total_qty = trade_qty + curr_qty
+                avg_price = (
+                    ((trade_qty * curr_price) + (curr_qty * avg_price))
+                    / total_qty
+                )
+                new_position = (total_qty, avg_price)
+                self.positions.append(new_position)
+                self.cash.append(self.cash[-1] - purchase_amount)
+
+                if total_qty > 0:
+                    # Long position
+                    self.equity.append(
+                        self.cash[-1] + (total_qty * curr_price))
+                else:
+                    # Short position
+                    self.equity.append(
+                        self.cash[-1]
+                        + abs(total_qty)
+                        * (avg_price - (curr_price - avg_price))
+                    )
+
+            # Reducing position or not changing
+            else:
+                if trade_qty > 0:
+                    # Reducing short position
+                    self.cash.append(self.cash[-1]
+                                     + abs(trade_qty)
+                                     * (avg_price - (curr_price - avg_price)))
+                    self.profit_loss.append(
+                        (avg_price - curr_price) * trade_qty)
+                else:
+                    # Reducing long position
+                    self.cash.append(
+                        self.cash[-1] + abs(trade_qty * curr_price))
+                    self.profit_loss.append(
+                        (curr_price - avg_price) * abs(trade_qty))
+
+                net_qty = curr_qty + trade_qty
+
+                if net_qty == 0:
+                    new_position = (net_qty, 0.0)
+                else:
+                    new_position = (net_qty, avg_price)
+
+                self.positions.append(new_position)
+
+                if net_qty > 0:
+                    # Long position
+                    self.equity.append(
+                        self.cash[-1] + abs(net_qty * curr_price))
+                else:
+                    # Short position
+                    self.equity.append(
+                        self.cash[-1]
+                        + abs(net_qty)
+                        * (avg_price - (curr_price - avg_price))
+                    )
+
+    def _take_action(self, action):
+        if self.mode == 'backtest':
+            self._take_backtest_action(action)
+        else:
+            self._take_live_action(action)
 
     def step(self, action):
         # Execute one time step within the environment
