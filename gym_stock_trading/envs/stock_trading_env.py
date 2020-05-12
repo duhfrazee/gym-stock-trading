@@ -326,17 +326,20 @@ class StockTradingEnv(gym.Env):
     def _initialize_data(self, filename):
         """Initializes environment data from files in path"""
 
+        files = os.listdir(self.path)
+        files = [fi for fi in files if fi.endswith(".csv")]
+
         if self.random_data_selection and filename == '':
-            filename = random.choice(os.listdir(self.path))
+            filename = random.choice(files)
 
         elif not self.random_data_selection and filename == '':
-            if self.current_episode >= len(os.listdir(self.path)):
+            if self.current_episode >= len(files):
                 self.current_episode = 0
 
-            filename = sorted(os.listdir(self.path))[self.current_episode]
+            filename = sorted(files)[self.current_episode]
 
         if filename[-4:] != '.csv':
-            return self._initialize_data('')
+            raise TypeError('File must be .csv')
 
         self.current_episode += 1
 
@@ -539,7 +542,10 @@ class StockTradingEnv(gym.Env):
         """Reset the state of the environment to an initial state"""
         self.current_step = 0
 
-        self._initialize_data(filename)
+        try:
+            self._initialize_data(filename)
+        except TypeError:
+            return TypeError('File must be .csv')
 
         self.equity = [self.base_value]
         self.profit_loss = [0.0]

@@ -679,6 +679,10 @@ class TestStockTradingEnv(unittest.TestCase):
 
             self.assertEqual(env.filename, correct_file)
 
+    def test_inititalize_data_for_non_csv_file_types(self):
+        self.env.reset('.DS_Store')
+        self.assertRaises(TypeError)
+
     def _initialize_data(self):
 
         """Creates a DataFrame from csv file.
