@@ -336,7 +336,7 @@ class StockTradingEnv(gym.Env):
             filename = sorted(os.listdir(self.path))[self.current_episode]
 
         if filename[-4:] != '.csv':
-            self._initialize_data('')
+            return self._initialize_data('')
 
         self.current_episode += 1
 
