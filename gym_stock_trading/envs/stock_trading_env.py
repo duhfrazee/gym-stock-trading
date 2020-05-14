@@ -440,6 +440,7 @@ class StockTradingEnv(gym.Env):
             tAMO.start()
             tAMO.join()
 
+            tWS = threading.Thread(target=self.live_conn.subscribe)
             # at 9:30AM EDT, subscribe to polygon websocket
             # get first bar
             # convert to dataframe
@@ -482,6 +483,9 @@ class StockTradingEnv(gym.Env):
         return observation
 
     def _submit_order(self, qty, order_type='market'):
+        if qty == 0:
+            # no trade needed
+            return
 
         side = 'buy' if qty > 0 else 'sell'
 
@@ -504,8 +508,34 @@ class StockTradingEnv(gym.Env):
                 )
 
             print("Market order of | " + str(qty) + " " + self.symbol + " " + side + " | completed.")
-        except:
-            print("Order of | " + str(qty) + " " +  self.symbol + " " + side + " | did not go through.")
+        except Exception as e:
+            print("Order of | " + str(qty) + " " + self.symbol + " " + side + " | did not go through.")
+            return e
+
+    def _close_position(self):
+        # REST.get_position(symbol)
+        try:
+            if self.mode == 'live':
+                position = self.live.get_position(symbol=self.symbol)
+            elif self.mode == 'paper':
+                position = self.live.get_position(symbol=self.symbol)
+
+            if position.side == 'long':
+                trade_qty = -int(position.qty)
+            else:
+                trade_qty = int(position.qty)
+
+            tOrder = threading.Thread(
+                target=self._submit_order, args=[trade_qty])
+            tOrder.start()
+            tOrder.join()
+
+            # TODO get returned order and ensure it was successful
+
+        except Exception as e:
+            # TODO if no position it returns: APIError: position does not exist
+            print('Unable to get position.')
+            print(e)
 
     def _take_backtest_action(self, action):
         curr_price = self.asset_data.iloc[self.current_step]['close']
@@ -657,8 +687,6 @@ class StockTradingEnv(gym.Env):
                 tOrder = threading.Thread(
                     target=self._submit_order, args=[trade_qty])
                 tOrder.start()
-                # TODO determine if we can remove join for orders
-                tOrder.join()
 
         elif curr_qty > 0 and curr_qty + trade_qty < 0 or\
                 curr_qty < 0 and curr_qty + trade_qty > 0:
@@ -669,6 +697,12 @@ class StockTradingEnv(gym.Env):
                 # Closing long position
                 self.cash.append(self.cash[-1] + curr_qty * curr_price)
                 self.profit_loss.append((curr_price - avg_price) * curr_qty)
+
+                if self.mode != 'backtest':
+                    tOrder = threading.Thread(
+                        target=self._close_position)
+                    tOrder.start()
+                    tOrder.join()
             else:
                 # Closing short position
                 self.cash.append(
@@ -679,6 +713,12 @@ class StockTradingEnv(gym.Env):
                 self.profit_loss.append(
                     (avg_price - curr_price) * abs(curr_qty))
 
+                if self.mode != 'backtest':
+                    tOrder = threading.Thread(
+                        target=self._close_position)
+                    tOrder.start()
+                    tOrder.join()
+
             # Simple short or long trade
             trade_qty += curr_qty
             purchase_amount = abs(trade_qty * curr_price)
@@ -686,6 +726,12 @@ class StockTradingEnv(gym.Env):
             self.positions.append(new_position)
             self.cash.append(self.cash[-1] - purchase_amount)
             self.equity.append(self.cash[-1] + purchase_amount)
+
+            if self.mode != 'backtest':
+                # Submit order
+                tOrder = threading.Thread(
+                    target=self._submit_order, args=[trade_qty])
+                tOrder.start()
         else:
             # Trade increases or reduces position (including closing out)
 
@@ -721,6 +767,12 @@ class StockTradingEnv(gym.Env):
                         + abs(total_qty)
                         * (avg_price - (curr_price - avg_price))
                     )
+
+                if self.mode != 'backtest':
+                    # Submit order
+                    tOrder = threading.Thread(
+                        target=self._submit_order, args=[trade_qty])
+                    tOrder.start()
 
             # Reducing position or not changing
             else:
@@ -758,6 +810,12 @@ class StockTradingEnv(gym.Env):
                         + abs(net_qty)
                         * (avg_price - (curr_price - avg_price))
                     )
+
+                if self.mode != 'backtest':
+                    # Submit order
+                    tOrder = threading.Thread(
+                        target=self._submit_order, args=[trade_qty])
+                    tOrder.start()
 
     def _take_action(self, action):
         if self.mode == 'backtest':
