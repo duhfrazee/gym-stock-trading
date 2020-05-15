@@ -5,6 +5,14 @@ import gym
 import numpy as np
 import pandas as pd
 
+# test submit order for qty pos, neg, and 0
+# test close position
+# test websocket
+# test correct observations
+# test await market open (already created)
+# test more without volume enabled
+# test convert EDT function
+
 
 class TestStockTradingEnv(unittest.TestCase):
     def setUp(self):
@@ -682,6 +690,9 @@ class TestStockTradingEnv(unittest.TestCase):
     def test_inititalize_data_for_non_csv_file_types(self):
         self.env.reset('.DS_Store')
         self.assertRaises(TypeError)
+
+    def test_await_market_open(self):
+        pass
 
     def _initialize_data(self):
 

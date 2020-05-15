@@ -339,7 +339,12 @@ class StockTradingEnv(gym.Env):
         self.observation_space = spaces.Box(
             low=0, high=1, shape=(5, observation_size), dtype=np.float16)
 
+    def _convert_to_EDT(self, _datetime):
+        # TODO complete this function
+        pass
+
     def _normalize_data(self):
+        # TODO fix normalization with previous close
         normalized_dataframe = self.asset_data.copy()
 
         highest_price = max(self.asset_data['high'])
@@ -363,6 +368,7 @@ class StockTradingEnv(gym.Env):
         return normalized_dataframe
 
     def _initialize_backtest_data(self, filename):
+        # TODO add prev_close and avg daily volume
         files = os.listdir(self.path)
         files = [fi for fi in files if fi.endswith(".csv")]
 
@@ -391,30 +397,45 @@ class StockTradingEnv(gym.Env):
         self.market = self.live.get_clock()
 
         if self.market.is_open:
-            _open = int(
+            _open = self._convert_to_EDT(
                 datetime.datetime.combine(
                     datetime.date.today(),
-                    datetime.time(9, 30)).timestamp() * 1000
+                    datetime.time(9, 30)
                 )
+            )
         else:
-            _open = int(self.market.next_open.timestamp() * 1000)
+            _open = self._convert_to_EDT(self.market.next_open)
 
-        close = int(self.market.next_close.timestamp() * 1000)
+        close = self._convert_to_EDT(self.market.next_close)
 
-        # TODO need to ensure the open/close times are sent in EDT
         self.asset_data = self.live.polygon.historic_agg_v2(
             self.symbol, 1, 'minute', _open, close).df
 
-        # TODO 'yesterday' could cause a bug if run aftermarket
-        yesterday = datetime.date.today() - timedelta(days=1)
-        today = datetime.date.today()
-        self.previous_close = self.live.polygon.historic_agg_v2(
-            self.symbol, 1, 'day', yesterday, today).df['close'][0]
+        self.current_step = len(self.asset_data)
 
-        today_minus_30 = datetime.date.today() - timedelta(days=30)
-        if self.volume_enabled:
-            self.daily_avg_volume = int(self.live.polygon.historic_agg_v2(
-                'MSFT', 1, 'day', today_minus_30, today).df['volume'].mean())
+        # TODO complete if statement below (needs to be tested)
+        today = self._convert_to_EDT(datetime.date.today())
+        if not self.market.is_open\
+                and self.market.next_close.date() != today.date():
+            previous_close_date = today
+        else:
+            # get previous market days close from calendar
+            _from = today - timedelta(days=7)
+            to = today - timedelta(days=1)
+
+            try:
+                cal = self.live.get_calendar(_from, to)
+            except:     # check for APIError
+                pass
+
+            previous_close_date = cal[-1].date
+
+        self.previous_close = self.live.polygon.historic_agg_v2(
+            self.symbol, 1, 'day', previous_close_date, today).df['close'][0]
+
+        today_minus_30 = today - timedelta(days=30)
+        self.daily_avg_volume = int(self.live.polygon.historic_agg_v2(
+            'MSFT', 1, 'day', today_minus_30, today).df['volume'].mean())
 
     def _initialize_data(self, filename):
         """Initializes environment data from files in path"""
@@ -432,6 +453,27 @@ class StockTradingEnv(gym.Env):
             time.sleep((next_open-curr_time).seconds)
             self.market = self.live.get_clock()
 
+    @self.live_conn.on(r'^AM$')
+    async def _on_minute_bars(self, conn, channel, bar):
+        # Maybe: get last bar and only append bars afterwards
+        # TODO properly append
+        if bar.symbol == self.symbol:
+            self.asset_data.append(
+                bar.start,  # convert to date
+                bar.open,
+                bar.high,
+                bar.low,
+                bar.close,
+                bar.volume
+            )
+            self._normalize_data()
+        # get first bar
+        # convert to dataframe
+        # append to dataframe
+        # normalize only new data
+        print('High: ' + str(bar.high))
+        print('bars', bar)
+
     def _next_observation(self):
         """Get the stock data for the current observation size."""
 
@@ -440,13 +482,14 @@ class StockTradingEnv(gym.Env):
             tAMO.start()
             tAMO.join()
 
-            tWS = threading.Thread(target=self.live_conn.subscribe)
             # at 9:30AM EDT, subscribe to polygon websocket
-            # get first bar
-            # convert to dataframe
-            # append to dataframe
-            # normalize only new data
-            pass
+            tWS = threading.Thread(
+                target=self.live_conn.run, args=[['AM.' + self.symbol]])
+            tWS.start()
+
+            while len(self.normalized_asset_data) == self.current_step:
+                # wait for new data to be appended
+                continue
 
         offset = self.current_step+1 - self.observation_size
 
@@ -513,7 +556,6 @@ class StockTradingEnv(gym.Env):
             return e
 
     def _close_position(self):
-        # REST.get_position(symbol)
         try:
             if self.mode == 'live':
                 position = self.live.get_position(symbol=self.symbol)
@@ -537,291 +579,163 @@ class StockTradingEnv(gym.Env):
             print('Unable to get position.')
             print(e)
 
-    def _take_backtest_action(self, action):
-        curr_price = self.asset_data.iloc[self.current_step]['close']
-
-        # Current position
-        curr_qty, avg_price = self.positions[-1]
-        curr_invested = curr_qty / self.max_qty
-
-        if action == 0:
-            # Close position
-            trade_qty = -curr_qty
-        else:
-            target_change = action - curr_invested
-            trade_qty = int(target_change * self.equity[-1] / curr_price)
-
-        if curr_qty == 0:
-            # Simple short or long trade
-            purchase_amount = abs(trade_qty * curr_price)
-            new_position = (trade_qty, curr_price)
-            self.positions.append(new_position)
-            self.cash.append(self.cash[-1] - purchase_amount)
-            self.equity.append(self.cash[-1] + purchase_amount)
-            self.profit_loss.append(0.0)
-
-        elif curr_qty > 0 and curr_qty + trade_qty < 0 or\
-                curr_qty < 0 and curr_qty + trade_qty > 0:
-            # Trade crosses from short to long or long to short
-
-            # Close current position, update P/L and cash
-            if curr_qty > 0:
-                # Closing long position
-                self.cash.append(self.cash[-1] + curr_qty * curr_price)
-                self.profit_loss.append((curr_price - avg_price) * curr_qty)
-            else:
-                # Closing short position
-                self.cash.append(
-                    self.cash[-1]
-                    + abs(curr_qty)
-                    * (avg_price - (curr_price - avg_price))
-                )
-                self.profit_loss.append(
-                    (avg_price - curr_price) * abs(curr_qty))
-
-            # Simple short or long trade
-            trade_qty += curr_qty
-            purchase_amount = abs(trade_qty * curr_price)
-            new_position = (trade_qty, curr_price)
-            self.positions.append(new_position)
-            self.cash.append(self.cash[-1] - purchase_amount)
-            self.equity.append(self.cash[-1] + purchase_amount)
-        else:
-            # Trade increases or reduces position (including closing out)
-
-            if curr_qty > 0 and trade_qty > 0 or\
-                    curr_qty < 0 and trade_qty < 0:
-                # Adding to position
-
-                purchase_amount = abs(trade_qty * curr_price)
-
-                while self.cash[-1] < purchase_amount:
-                    # Descrease trade_qty if not enough cash
-                    trade_qty = trade_qty - 1 if trade_qty > 0\
-                            else trade_qty + 1
-                    purchase_amount = abs(trade_qty * curr_price)
-
-                total_qty = trade_qty + curr_qty
-                avg_price = (
-                    ((trade_qty * curr_price) + (curr_qty * avg_price))
-                    / total_qty
-                )
-                new_position = (total_qty, avg_price)
-                self.positions.append(new_position)
-                self.cash.append(self.cash[-1] - purchase_amount)
-
-                if total_qty > 0:
-                    # Long position
-                    self.equity.append(
-                        self.cash[-1] + (total_qty * curr_price))
-                else:
-                    # Short position
-                    self.equity.append(
-                        self.cash[-1]
-                        + abs(total_qty)
-                        * (avg_price - (curr_price - avg_price))
-                    )
-
-            # Reducing position or not changing
-            else:
-                if trade_qty > 0:
-                    # Reducing short position
-                    self.cash.append(self.cash[-1]
-                                     + abs(trade_qty)
-                                     * (avg_price - (curr_price - avg_price)))
-                    self.profit_loss.append(
-                        (avg_price - curr_price) * trade_qty)
-                else:
-                    # Reducing long position
-                    self.cash.append(
-                        self.cash[-1] + abs(trade_qty * curr_price))
-                    self.profit_loss.append(
-                        (curr_price - avg_price) * abs(trade_qty))
-
-                net_qty = curr_qty + trade_qty
-
-                if net_qty == 0:
-                    new_position = (net_qty, 0.0)
-                else:
-                    new_position = (net_qty, avg_price)
-
-                self.positions.append(new_position)
-
-                if net_qty > 0:
-                    # Long position
-                    self.equity.append(
-                        self.cash[-1] + abs(net_qty * curr_price))
-                else:
-                    # Short position
-                    self.equity.append(
-                        self.cash[-1]
-                        + abs(net_qty)
-                        * (avg_price - (curr_price - avg_price))
-                    )
-
-    def _take_live_action(self, action):
-        curr_price = self.asset_data.iloc[self.current_step]['close']
-
-        # Current position
-        curr_qty, avg_price = self.positions[-1]
-        curr_invested = curr_qty / self.max_qty
-
-        if action == 0:
-            # Close position
-            trade_qty = -curr_qty
-        else:
-            target_change = action - curr_invested
-            trade_qty = int(target_change * self.equity[-1] / curr_price)
-
-        if curr_qty == 0:
-            # Simple short or long trade
-            purchase_amount = abs(trade_qty * curr_price)
-            new_position = (trade_qty, curr_price)
-            self.positions.append(new_position)
-            self.cash.append(self.cash[-1] - purchase_amount)
-            self.equity.append(self.cash[-1] + purchase_amount)
-            self.profit_loss.append(0.0)
-
-            if self.mode != 'backtest':
-                # Submit order
-                tOrder = threading.Thread(
-                    target=self._submit_order, args=[trade_qty])
-                tOrder.start()
-
-        elif curr_qty > 0 and curr_qty + trade_qty < 0 or\
-                curr_qty < 0 and curr_qty + trade_qty > 0:
-            # Trade crosses from short to long or long to short
-
-            # Close current position, update P/L and cash
-            if curr_qty > 0:
-                # Closing long position
-                self.cash.append(self.cash[-1] + curr_qty * curr_price)
-                self.profit_loss.append((curr_price - avg_price) * curr_qty)
-
-                if self.mode != 'backtest':
-                    tOrder = threading.Thread(
-                        target=self._close_position)
-                    tOrder.start()
-                    tOrder.join()
-            else:
-                # Closing short position
-                self.cash.append(
-                    self.cash[-1]
-                    + abs(curr_qty)
-                    * (avg_price - (curr_price - avg_price))
-                )
-                self.profit_loss.append(
-                    (avg_price - curr_price) * abs(curr_qty))
-
-                if self.mode != 'backtest':
-                    tOrder = threading.Thread(
-                        target=self._close_position)
-                    tOrder.start()
-                    tOrder.join()
-
-            # Simple short or long trade
-            trade_qty += curr_qty
-            purchase_amount = abs(trade_qty * curr_price)
-            new_position = (trade_qty, curr_price)
-            self.positions.append(new_position)
-            self.cash.append(self.cash[-1] - purchase_amount)
-            self.equity.append(self.cash[-1] + purchase_amount)
-
-            if self.mode != 'backtest':
-                # Submit order
-                tOrder = threading.Thread(
-                    target=self._submit_order, args=[trade_qty])
-                tOrder.start()
-        else:
-            # Trade increases or reduces position (including closing out)
-
-            if curr_qty > 0 and trade_qty > 0 or\
-                    curr_qty < 0 and trade_qty < 0:
-                # Adding to position
-
-                purchase_amount = abs(trade_qty * curr_price)
-
-                while self.cash[-1] < purchase_amount:
-                    # Descrease trade_qty if not enough cash
-                    trade_qty = trade_qty - 1 if trade_qty > 0\
-                            else trade_qty + 1
-                    purchase_amount = abs(trade_qty * curr_price)
-
-                total_qty = trade_qty + curr_qty
-                avg_price = (
-                    ((trade_qty * curr_price) + (curr_qty * avg_price))
-                    / total_qty
-                )
-                new_position = (total_qty, avg_price)
-                self.positions.append(new_position)
-                self.cash.append(self.cash[-1] - purchase_amount)
-
-                if total_qty > 0:
-                    # Long position
-                    self.equity.append(
-                        self.cash[-1] + (total_qty * curr_price))
-                else:
-                    # Short position
-                    self.equity.append(
-                        self.cash[-1]
-                        + abs(total_qty)
-                        * (avg_price - (curr_price - avg_price))
-                    )
-
-                if self.mode != 'backtest':
-                    # Submit order
-                    tOrder = threading.Thread(
-                        target=self._submit_order, args=[trade_qty])
-                    tOrder.start()
-
-            # Reducing position or not changing
-            else:
-                if trade_qty > 0:
-                    # Reducing short position
-                    self.cash.append(self.cash[-1]
-                                     + abs(trade_qty)
-                                     * (avg_price - (curr_price - avg_price)))
-                    self.profit_loss.append(
-                        (avg_price - curr_price) * trade_qty)
-                else:
-                    # Reducing long position
-                    self.cash.append(
-                        self.cash[-1] + abs(trade_qty * curr_price))
-                    self.profit_loss.append(
-                        (curr_price - avg_price) * abs(trade_qty))
-
-                net_qty = curr_qty + trade_qty
-
-                if net_qty == 0:
-                    new_position = (net_qty, 0.0)
-                else:
-                    new_position = (net_qty, avg_price)
-
-                self.positions.append(new_position)
-
-                if net_qty > 0:
-                    # Long position
-                    self.equity.append(
-                        self.cash[-1] + abs(net_qty * curr_price))
-                else:
-                    # Short position
-                    self.equity.append(
-                        self.cash[-1]
-                        + abs(net_qty)
-                        * (avg_price - (curr_price - avg_price))
-                    )
-
-                if self.mode != 'backtest':
-                    # Submit order
-                    tOrder = threading.Thread(
-                        target=self._submit_order, args=[trade_qty])
-                    tOrder.start()
-
     def _take_action(self, action):
-        if self.mode == 'backtest':
-            self._take_backtest_action(action)
+        curr_price = self.asset_data.iloc[self.current_step]['close']
+
+        # Current position
+        curr_qty, avg_price = self.positions[-1]
+        curr_invested = curr_qty / self.max_qty
+
+        if action == 0:
+            # Close position
+            trade_qty = -curr_qty
         else:
-            self._take_live_action(action)
+            target_change = action - curr_invested
+            trade_qty = int(target_change * self.equity[-1] / curr_price)
+
+        if curr_qty == 0:
+            # Simple short or long trade
+            purchase_amount = abs(trade_qty * curr_price)
+            new_position = (trade_qty, curr_price)
+            self.positions.append(new_position)
+            self.cash.append(self.cash[-1] - purchase_amount)
+            self.equity.append(self.cash[-1] + purchase_amount)
+            self.profit_loss.append(0.0)
+
+            if self.mode != 'backtest':
+                # Submit order
+                tOrder = threading.Thread(
+                    target=self._submit_order, args=[trade_qty])
+                tOrder.start()
+
+        elif curr_qty > 0 and curr_qty + trade_qty < 0 or\
+                curr_qty < 0 and curr_qty + trade_qty > 0:
+            # Trade crosses from short to long or long to short
+
+            # Close current position, update P/L and cash
+            if curr_qty > 0:
+                # Closing long position
+                self.cash.append(self.cash[-1] + curr_qty * curr_price)
+                self.profit_loss.append((curr_price - avg_price) * curr_qty)
+
+                if self.mode != 'backtest':
+                    tOrder = threading.Thread(
+                        target=self._close_position)
+                    tOrder.start()
+                    tOrder.join()
+            else:
+                # Closing short position
+                self.cash.append(
+                    self.cash[-1]
+                    + abs(curr_qty)
+                    * (avg_price - (curr_price - avg_price))
+                )
+                self.profit_loss.append(
+                    (avg_price - curr_price) * abs(curr_qty))
+
+                if self.mode != 'backtest':
+                    tOrder = threading.Thread(
+                        target=self._close_position)
+                    tOrder.start()
+                    tOrder.join()
+
+            # Simple short or long trade
+            trade_qty += curr_qty
+            purchase_amount = abs(trade_qty * curr_price)
+            new_position = (trade_qty, curr_price)
+            self.positions.append(new_position)
+            self.cash.append(self.cash[-1] - purchase_amount)
+            self.equity.append(self.cash[-1] + purchase_amount)
+
+            if self.mode != 'backtest':
+                # Submit order
+                tOrder = threading.Thread(
+                    target=self._submit_order, args=[trade_qty])
+                tOrder.start()
+        else:
+            # Trade increases or reduces position (including closing out)
+
+            if curr_qty > 0 and trade_qty > 0 or\
+                    curr_qty < 0 and trade_qty < 0:
+                # Adding to position
+
+                purchase_amount = abs(trade_qty * curr_price)
+
+                while self.cash[-1] < purchase_amount:
+                    # Descrease trade_qty if not enough cash
+                    trade_qty = trade_qty - 1 if trade_qty > 0\
+                            else trade_qty + 1
+                    purchase_amount = abs(trade_qty * curr_price)
+
+                total_qty = trade_qty + curr_qty
+                avg_price = (
+                    ((trade_qty * curr_price) + (curr_qty * avg_price))
+                    / total_qty
+                )
+                new_position = (total_qty, avg_price)
+                self.positions.append(new_position)
+                self.cash.append(self.cash[-1] - purchase_amount)
+
+                if total_qty > 0:
+                    # Long position
+                    self.equity.append(
+                        self.cash[-1] + (total_qty * curr_price))
+                else:
+                    # Short position
+                    self.equity.append(
+                        self.cash[-1]
+                        + abs(total_qty)
+                        * (avg_price - (curr_price - avg_price))
+                    )
+
+                if self.mode != 'backtest':
+                    # Submit order
+                    tOrder = threading.Thread(
+                        target=self._submit_order, args=[trade_qty])
+                    tOrder.start()
+
+            # Reducing position or not changing
+            else:
+                if trade_qty > 0:
+                    # Reducing short position
+                    self.cash.append(self.cash[-1]
+                                     + abs(trade_qty)
+                                     * (avg_price - (curr_price - avg_price)))
+                    self.profit_loss.append(
+                        (avg_price - curr_price) * trade_qty)
+                else:
+                    # Reducing long position
+                    self.cash.append(
+                        self.cash[-1] + abs(trade_qty * curr_price))
+                    self.profit_loss.append(
+                        (curr_price - avg_price) * abs(trade_qty))
+
+                net_qty = curr_qty + trade_qty
+
+                if net_qty == 0:
+                    new_position = (net_qty, 0.0)
+                else:
+                    new_position = (net_qty, avg_price)
+
+                self.positions.append(new_position)
+
+                if net_qty > 0:
+                    # Long position
+                    self.equity.append(
+                        self.cash[-1] + abs(net_qty * curr_price))
+                else:
+                    # Short position
+                    self.equity.append(
+                        self.cash[-1]
+                        + abs(net_qty)
+                        * (avg_price - (curr_price - avg_price))
+                    )
+
+                if self.mode != 'backtest':
+                    # Submit order
+                    tOrder = threading.Thread(
+                        target=self._submit_order, args=[trade_qty])
+                    tOrder.start()
 
     def step(self, action):
         # Execute one time step within the environment
@@ -847,10 +761,26 @@ class StockTradingEnv(gym.Env):
                 done = True if self.equity[-1] / self.base_value <= -0.05\
                             else False
         else:
-            # this needs to be robust on when an algo should close positions and end
-            # could be time of day, before market close
-            # could be down a certain percentage
-            pass
+            # Close 11 minutes before end of day
+            stop_time = self._convert_to_EDT(
+                datetime.datetime.combine(
+                    datetime.date.today(),
+                    datetime.time(hour=3, minute=49)
+                )
+            )
+            if self._convert_to_EDT(datetime.datetime.now()) > stop_time:
+                tOrder = threading.Thread(
+                    target=self._close_position)
+                tOrder.start()
+                done = True
+            # TODO this needs to be more reflective of real data in future
+            elif self.equity[-1] / self.base_value <= -0.05:
+                tOrder = threading.Thread(
+                    target=self._close_position)
+                tOrder.start()
+                done = True
+            else:
+                done = False
 
         return obs, reward, done, {}
 
@@ -885,4 +815,8 @@ class StockTradingEnv(gym.Env):
             window_size=LOOKBACK_WINDOW_SIZE)
 
     def close(self):
-        pass
+        if self.mode != 'backtest':
+            # Ensure no positions are held over night
+            # check current positions
+            # close if necessary
+            pass
