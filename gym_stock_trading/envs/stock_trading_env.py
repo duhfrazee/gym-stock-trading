@@ -20,6 +20,7 @@ from datetime import timedelta
 from gym import error, spaces, utils
 from gym.utils import seeding
 from mplfinance.original_flavor import candlestick_ochl as candlestick
+from pytz import timezone
 
 LOOKBACK_WINDOW_SIZE = 40
 VOLUME_CHART_HEIGHT = 0.33
@@ -341,6 +342,7 @@ class StockTradingEnv(gym.Env):
 
     def _convert_to_EDT(self, _datetime):
         # TODO complete this function
+        # take in whatever time is given and ensure it is outputted as EDT
         pass
 
     def _normalize_data(self):
@@ -396,46 +398,53 @@ class StockTradingEnv(gym.Env):
     def _initialize_live_data(self):
         self.market = self.live.get_clock()
 
+        eastern = timezone('US/Eastern')
+        today = datetime.datetime.now(eastern)
+
         if self.market.is_open:
-            _open = self._convert_to_EDT(
+            _open = int(eastern.localize(
                 datetime.datetime.combine(
-                    datetime.date.today(),
+                    today,
                     datetime.time(9, 30)
                 )
-            )
+            ).timestamp() * 1000)
         else:
-            _open = self._convert_to_EDT(self.market.next_open)
+            _open = int(self.market.next_open.timestamp() * 1000)
 
-        close = self._convert_to_EDT(self.market.next_close)
+        close = int(self.market.next_close.timestamp() * 1000)
 
         self.asset_data = self.live.polygon.historic_agg_v2(
             self.symbol, 1, 'minute', _open, close).df
 
         self.current_step = len(self.asset_data)
 
-        # TODO complete if statement below (needs to be tested)
-        today = self._convert_to_EDT(datetime.date.today())
+        # TODO needs to be tested
         if not self.market.is_open\
                 and self.market.next_close.date() != today.date():
-            previous_close_date = today
+            previous_close_date = today.date()
         else:
-            # get previous market days close from calendar
-            _from = today - timedelta(days=7)
-            to = today - timedelta(days=1)
+            # Get previous market day from alpaca calendar
+            _from = today.date() - timedelta(days=7)
+            to = today.date() - timedelta(days=1)
 
-            try:
-                cal = self.live.get_calendar(_from, to)
-            except:     # check for APIError
-                pass
+            cal = self.live.get_calendar(_from, to)
 
-            previous_close_date = cal[-1].date
+            previous_close_date = cal[-1].date.date()
+
+        previous_close_date_plus_one = previous_close_date + timedelta(days=1)
 
         self.previous_close = self.live.polygon.historic_agg_v2(
-            self.symbol, 1, 'day', previous_close_date, today).df['close'][0]
+            self.symbol,
+            1,
+            'day',
+            previous_close_date,
+            previous_close_date_plus_one
+        ).df['close'][0]
 
-        today_minus_30 = today - timedelta(days=30)
+        today_minus_30 = today.date() - timedelta(days=30)
         self.daily_avg_volume = int(self.live.polygon.historic_agg_v2(
-            'MSFT', 1, 'day', today_minus_30, today).df['volume'].mean())
+            'MSFT', 1, 'day', today_minus_30, today.date()).df['volume'].mean()
+        )
 
     def _initialize_data(self, filename):
         """Initializes environment data from files in path"""
