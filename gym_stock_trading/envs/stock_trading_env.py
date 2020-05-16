@@ -345,9 +345,6 @@ class StockTradingEnv(gym.Env):
         # TODO fix normalization with previous close
         normalized_dataframe = self.asset_data.copy()
 
-        # highest_price = max(self.asset_data['high'])
-        # highest_volume = max(self.asset_data['volume'])
-
         normalized_dataframe['open'] =\
             normalized_dataframe['open'] / (2 * self.previous_close)
 

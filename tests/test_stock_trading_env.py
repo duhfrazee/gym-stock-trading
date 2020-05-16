@@ -12,6 +12,7 @@ import pandas as pd
 # test await market open (already created)
 # test more without volume enabled
 # test convert EDT function
+# test prev_close over a lot of episodes
 
 
 class TestStockTradingEnv(unittest.TestCase):
@@ -23,8 +24,6 @@ class TestStockTradingEnv(unittest.TestCase):
 
         self.filename = 'TSLA2019-04-04.csv'
 
-        # highest_price = 271.2
-        # highest_volume = 706650
         self.previous_close = 291.81
         self.daily_avg_volume = 31140787
 
