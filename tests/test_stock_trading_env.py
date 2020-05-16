@@ -11,8 +11,6 @@ import pandas as pd
 # test correct observations
 # test await market open (already created)
 # test more without volume enabled
-# test convert EDT function
-# test prev_close over a lot of episodes
 
 
 class TestStockTradingEnv(unittest.TestCase):
@@ -696,7 +694,49 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertRaises(TypeError)
 
     def test_await_market_open(self):
+        env = gym.make(
+            'gym_stock_trading:StockTrading-v0',
+            mode='paper',
+            symbol='TSLA'
+        )
+
+        # env.reset()
+        # _ = env.step(np.array([0.0]))
         pass
+
+    def test_previous_close_for_backtest_over_several_episodes(self):
+        env = gym.make(
+            'gym_stock_trading:StockTrading-v0',
+            filepath=self.path,
+            random_data_selection=False
+        )
+
+        previous_closes = [279.18, 252.48, 267.53, 301.15, 342.95]
+
+        for correct_close in previous_closes:
+            done = False
+            env.reset()
+            while not done:
+                _, _, done, _ = env.step(np.array([0.0]))
+            self.assertEqual(env.previous_close, correct_close)
+
+    def test_random_data_selection_equals_false(self):
+        env = gym.make(
+            'gym_stock_trading:StockTrading-v0',
+            filepath=self.path,
+            random_data_selection=False
+        )
+
+        files = os.listdir(self.path)
+        files = [fi for fi in files if fi.endswith(".csv")]
+        files = sorted(files)
+
+        for correct_filename in files:
+            done = False
+            env.reset()
+            while not done:
+                _, _, done, _ = env.step(np.array([0.0]))
+            self.assertEqual(env.filename, correct_filename)
 
     def _initialize_data(self):
 
