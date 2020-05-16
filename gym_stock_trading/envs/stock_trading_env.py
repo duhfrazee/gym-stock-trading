@@ -388,10 +388,10 @@ class StockTradingEnv(gym.Env):
         asset_data = pd.read_csv(self.path + filename)
         asset_data['timestamp'] = pd.to_datetime(asset_data['timestamp'])
 
-        files = os.listdir(self.path + 'daily/')
+        files = os.listdir(self.path + 'day/')
         files = [fi for fi in files if fi.endswith(".csv")]
 
-        daily_data = pd.read_csv(self.path + 'daily/' + files[0])
+        daily_data = pd.read_csv(self.path + 'day/' + files[0])
         daily_data['timestamp'] = pd.to_datetime(daily_data['timestamp'])
 
         date = asset_data.iloc[0]['timestamp']
