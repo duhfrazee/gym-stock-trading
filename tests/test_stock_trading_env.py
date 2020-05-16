@@ -23,8 +23,10 @@ class TestStockTradingEnv(unittest.TestCase):
 
         self.filename = 'TSLA2019-04-04.csv'
 
-        highest_price = 271.2
-        highest_volume = 706650
+        # highest_price = 271.2
+        # highest_volume = 706650
+        self.previous_close = 291.81
+        self.daily_avg_volume = 31140787
 
         step0_open = 261.89
         step0_high = 262.77
@@ -33,11 +35,11 @@ class TestStockTradingEnv(unittest.TestCase):
         step0_volume = 706650
 
         self.correct_step0_obs = np.array([
-            [step0_open / highest_price],
-            [step0_high / highest_price],
-            [step0_low / highest_price],
-            [step0_close / highest_price],
-            [step0_volume / highest_volume]
+            [step0_open / (2*self.previous_close)],
+            [step0_high / (2*self.previous_close)],
+            [step0_low / (2*self.previous_close)],
+            [step0_close / (2*self.previous_close)],
+            [step0_volume / self.daily_avg_volume]
         ])
 
         step1_open = 261.68
@@ -47,11 +49,11 @@ class TestStockTradingEnv(unittest.TestCase):
         step1_volume = 378093
 
         self.correct_step1_obs = np.array([
-            [step1_open / highest_price],
-            [step1_high / highest_price],
-            [step1_low / highest_price],
-            [step1_close / highest_price],
-            [step1_volume / highest_volume]
+            [step1_open / (2*self.previous_close)],
+            [step1_high / (2*self.previous_close)],
+            [step1_low / (2*self.previous_close)],
+            [step1_close / (2*self.previous_close)],
+            [step1_volume / self.daily_avg_volume]
         ])
 
         step2_open = 263.425
@@ -61,11 +63,11 @@ class TestStockTradingEnv(unittest.TestCase):
         step2_volume = 369398
 
         self.correct_step2_obs = np.array([
-            [step2_open / highest_price],
-            [step2_high / highest_price],
-            [step2_low / highest_price],
-            [step2_close / highest_price],
-            [step2_volume / highest_volume]
+            [step2_open / (2*self.previous_close)],
+            [step2_high / (2*self.previous_close)],
+            [step2_low / (2*self.previous_close)],
+            [step2_close / (2*self.previous_close)],
+            [step2_volume / self.daily_avg_volume]
         ])
 
         laststep_open = 267.78
@@ -75,11 +77,11 @@ class TestStockTradingEnv(unittest.TestCase):
         laststep_volume = 4627
 
         self.correct_laststep_obs = np.array([
-            [laststep_open / highest_price],
-            [laststep_high / highest_price],
-            [laststep_low / highest_price],
-            [laststep_close / highest_price],
-            [laststep_volume / highest_volume]
+            [laststep_open / (2*self.previous_close)],
+            [laststep_high / (2*self.previous_close)],
+            [laststep_low / (2*self.previous_close)],
+            [laststep_close / (2*self.previous_close)],
+            [laststep_volume / self.daily_avg_volume]
         ])
 
     def test_inititalize_env(self):
@@ -114,6 +116,9 @@ class TestStockTradingEnv(unittest.TestCase):
         reward = self.env.rewards[-1]
         max_qty = self.env.max_qty
 
+        self.assertEqual(self.env.previous_close, self.previous_close)
+        self.assertEqual(
+            self.env.daily_avg_volume, self.daily_avg_volume)
         self.assertEqual(self.env.current_step, 0)
         self.assertEqual(self.env.observation_size, 1)
         self.assertEqual(self.env.base_value, 10000)

@@ -278,6 +278,7 @@ class StockTradingEnv(gym.Env):
 
     metadata = {'render.modes': ['human']}
     visualization = None
+    eastern = timezone('US/Eastern')
 
     def __init__(self, mode='backtest', symbol=None, filepath=None,
                  observation_size=1, volume_enabled=True,
@@ -340,32 +341,27 @@ class StockTradingEnv(gym.Env):
         self.observation_space = spaces.Box(
             low=0, high=1, shape=(5, observation_size), dtype=np.float16)
 
-    def _convert_to_EDT(self, _datetime):
-        # TODO complete this function
-        # take in whatever time is given and ensure it is outputted as EDT
-        pass
-
     def _normalize_data(self):
         # TODO fix normalization with previous close
         normalized_dataframe = self.asset_data.copy()
 
-        highest_price = max(self.asset_data['high'])
-        highest_volume = max(self.asset_data['volume'])
+        # highest_price = max(self.asset_data['high'])
+        # highest_volume = max(self.asset_data['volume'])
 
         normalized_dataframe['open'] =\
-            normalized_dataframe['open'] / highest_price
+            normalized_dataframe['open'] / (2 * self.previous_close)
 
         normalized_dataframe['high'] =\
-            normalized_dataframe['high'] / highest_price
+            normalized_dataframe['high'] / (2 * self.previous_close)
 
         normalized_dataframe['low'] =\
-            normalized_dataframe['low'] / highest_price
+            normalized_dataframe['low'] / (2 * self.previous_close)
 
         normalized_dataframe['close'] =\
-            normalized_dataframe['close'] / highest_price
+            normalized_dataframe['close'] / (2 * self.previous_close)
 
         normalized_dataframe['volume'] =\
-            normalized_dataframe['volume'] / highest_volume
+            normalized_dataframe['volume'] / self.daily_avg_volume
 
         return normalized_dataframe
 
@@ -390,6 +386,20 @@ class StockTradingEnv(gym.Env):
 
         # Convert to data frame
         asset_data = pd.read_csv(self.path + filename)
+        asset_data['timestamp'] = pd.to_datetime(asset_data['timestamp'])
+
+        files = os.listdir(self.path + 'daily/')
+        files = [fi for fi in files if fi.endswith(".csv")]
+
+        daily_data = pd.read_csv(self.path + 'daily/' + files[0])
+        daily_data['timestamp'] = pd.to_datetime(daily_data['timestamp'])
+
+        date = asset_data.iloc[0]['timestamp']
+
+        self.previous_close = daily_data[
+            daily_data['timestamp'] < date]['close'].iloc[-2]
+        # TODO should include most recent day but data was incomplete
+        self.daily_avg_volume = int(daily_data['volume'].iloc[-31:-1].mean())
 
         self.filename = filename
         self.asset_data = asset_data
@@ -398,11 +408,10 @@ class StockTradingEnv(gym.Env):
     def _initialize_live_data(self):
         self.market = self.live.get_clock()
 
-        eastern = timezone('US/Eastern')
-        today = datetime.datetime.now(eastern)
+        today = datetime.datetime.now(self.eastern)
 
         if self.market.is_open:
-            _open = int(eastern.localize(
+            _open = int(self.eastern.localize(
                 datetime.datetime.combine(
                     today,
                     datetime.time(9, 30)
@@ -457,31 +466,29 @@ class StockTradingEnv(gym.Env):
     def _await_market_open(self):
         while not self.market.is_open:
             print('Waiting for market to open...')
-            curr_time = datetime.datetime.today()
+            curr_time = datetime.datetime.now(self.eastern)
             next_open = self.market.next_open
             time.sleep((next_open-curr_time).seconds)
             self.market = self.live.get_clock()
 
-    @self.live_conn.on(r'^AM$')
     async def _on_minute_bars(self, conn, channel, bar):
-        # Maybe: get last bar and only append bars afterwards
-        # TODO properly append
         if bar.symbol == self.symbol:
-            self.asset_data.append(
-                bar.start,  # convert to date
-                bar.open,
-                bar.high,
-                bar.low,
-                bar.close,
-                bar.volume
+            new_row = {
+                'timestamp': datetime.datetime.fromtimestamp(
+                    bar.start,
+                    self.eastern
+                ),
+                'open': bar.open,
+                'high': bar.high,
+                'low': bar.low,
+                'close': bar.close,
+                'volume': bar.volume
+            }
+            self.asset_data = self.asset_data.append(
+                new_row,
+                ignore_index=True
             )
             self._normalize_data()
-        # get first bar
-        # convert to dataframe
-        # append to dataframe
-        # normalize only new data
-        print('High: ' + str(bar.high))
-        print('bars', bar)
 
     def _next_observation(self):
         """Get the stock data for the current observation size."""
@@ -492,6 +499,8 @@ class StockTradingEnv(gym.Env):
             tAMO.join()
 
             # at 9:30AM EDT, subscribe to polygon websocket
+            _on_minute_bars =\
+                self.live_conn.on(r'AM$')(self._on_minute_bars)
             tWS = threading.Thread(
                 target=self.live_conn.run, args=[['AM.' + self.symbol]])
             tWS.start()
@@ -558,10 +567,12 @@ class StockTradingEnv(gym.Env):
                     type=order_type,
                     time_in_force='day'
                 )
-
-            print("Market order of | " + str(qty) + " " + self.symbol + " " + side + " | completed.")
+        # TODO log difference between close price and filled price
         except Exception as e:
-            print("Order of | " + str(qty) + " " + self.symbol + " " + side + " | did not go through.")
+            # TODO return error
+            # check for:
+            # 403 Forbidden: Buying power or shares is not sufficient.
+            # 422 Unprocessable: Input parameters are not recognized.
             return e
 
     def _close_position(self):
@@ -581,12 +592,10 @@ class StockTradingEnv(gym.Env):
             tOrder.start()
             tOrder.join()
 
-            # TODO get returned order and ensure it was successful
-
         except Exception as e:
-            # TODO if no position it returns: APIError: position does not exist
-            print('Unable to get position.')
-            print(e)
+            if str(e) != 'position does not exist':
+                # TODO return error
+                return e
 
     def _take_action(self, action):
         curr_price = self.asset_data.iloc[self.current_step]['close']
@@ -771,13 +780,16 @@ class StockTradingEnv(gym.Env):
                             else False
         else:
             # Close 11 minutes before end of day
-            stop_time = self._convert_to_EDT(
+            now = datetime.datetime.now(self.eastern)
+
+            stop_time = self.eastern.localize(
                 datetime.datetime.combine(
-                    datetime.date.today(),
-                    datetime.time(hour=3, minute=49)
+                    now,
+                    datetime.time(3, 49)
                 )
             )
-            if self._convert_to_EDT(datetime.datetime.now()) > stop_time:
+
+            if now > stop_time:
                 tOrder = threading.Thread(
                     target=self._close_position)
                 tOrder.start()
@@ -826,6 +838,9 @@ class StockTradingEnv(gym.Env):
     def close(self):
         if self.mode != 'backtest':
             # Ensure no positions are held over night
-            # check current positions
-            # close if necessary
-            pass
+            tOrder = threading.Thread(
+                target=self._close_position)
+            tOrder.start()
+            tOrder.join()
+
+            self.live.cancel_all_orders()
