@@ -38,6 +38,8 @@ try:
 except KeyError:
     pass
 
+# TODO fix chart class with str dates
+
 
 class Chart():
     """A stock chart visualization using matplotlib
@@ -192,7 +194,7 @@ class Chart():
                                        arrowprops=(dict(color=color)))
 
     def _date2num(self, date):
-        return mdates.datestr2num(date)
+        return mdates.datestr2num(str(date))
 
     def render(self, current_step, account_value, positions, window_size=40):
         """render() utilizes matplotlib to visualize the observations and
@@ -342,7 +344,7 @@ class StockTradingEnv(gym.Env):
             low=0, high=1, shape=(5, observation_size), dtype=np.float16)
 
     def _normalize_data(self):
-        # TODO fix normalization with previous close
+
         normalized_dataframe = self.asset_data.copy()
 
         normalized_dataframe['open'] =\
@@ -363,7 +365,6 @@ class StockTradingEnv(gym.Env):
         return normalized_dataframe
 
     def _initialize_backtest_data(self, filename):
-        # TODO add prev_close and avg daily volume
         files = os.listdir(self.path)
         files = [fi for fi in files if fi.endswith(".csv")]
 
@@ -395,6 +396,7 @@ class StockTradingEnv(gym.Env):
 
         self.previous_close = daily_data[
             daily_data['timestamp'] < date]['close'].iloc[-2]
+
         # TODO should include most recent day but data was incomplete
         self.daily_avg_volume = int(daily_data['volume'].iloc[-31:-1].mean())
 
@@ -424,10 +426,14 @@ class StockTradingEnv(gym.Env):
 
         self.current_step = len(self.asset_data)
 
-        # TODO needs to be tested
         if not self.market.is_open\
                 and self.market.next_close.date() != today.date():
-            previous_close_date = today.date()
+            # Get previous market day (including today) from alpaca calendar
+            _from = today.date() - timedelta(days=7)
+            to = today.date()
+
+            cal = self.live.get_calendar(_from, to)
+            previous_close_date = cal[-1].date.date()
         else:
             # Get previous market day from alpaca calendar
             _from = today.date() - timedelta(days=7)
@@ -443,13 +449,15 @@ class StockTradingEnv(gym.Env):
             self.symbol,
             1,
             'day',
-            previous_close_date,
-            previous_close_date_plus_one
+            str(previous_close_date),
+            str(previous_close_date_plus_one)
         ).df['close'][0]
 
         today_minus_30 = today.date() - timedelta(days=30)
         self.daily_avg_volume = int(self.live.polygon.historic_agg_v2(
-            'MSFT', 1, 'day', today_minus_30, today.date()).df['volume'].mean()
+            self.symbol, 1, 'day',
+            str(today_minus_30),
+            str(today.date())).df['volume'].mean()
         )
 
     def _initialize_data(self, filename):
@@ -462,10 +470,13 @@ class StockTradingEnv(gym.Env):
 
     def _await_market_open(self):
         while not self.market.is_open:
-            print('Waiting for market to open...')
             curr_time = datetime.datetime.now(self.eastern)
-            next_open = self.market.next_open
-            time.sleep((next_open-curr_time).seconds)
+            next_open = self.market.next_open.astimezone(self.eastern)
+            wait_time = (next_open-curr_time).seconds
+
+            print('Waiting ' + str(wait_time) + ' seconds for market to open.')
+
+            time.sleep(wait_time)
             self.market = self.live.get_clock()
 
     async def _on_minute_bars(self, conn, channel, bar):
@@ -491,19 +502,21 @@ class StockTradingEnv(gym.Env):
         """Get the stock data for the current observation size."""
 
         if self.mode != 'backtest':
-            tAMO = threading.Thread(target=self._await_market_open)
-            tAMO.start()
-            tAMO.join()
+            if not self.market.is_open:
+                tAMO = threading.Thread(target=self._await_market_open)
+                tAMO.start()
+                tAMO.join()
 
-            # at 9:30AM EDT, subscribe to polygon websocket
-            _on_minute_bars =\
-                self.live_conn.on(r'AM$')(self._on_minute_bars)
-            tWS = threading.Thread(
-                target=self.live_conn.run, args=[['AM.' + self.symbol]])
-            tWS.start()
+                # At 9:30AM EDT, subscribe to polygon websocket
+                print('Joining websocket...')
+                _on_minute_bars =\
+                    self.live_conn.on(r'AM$')(self._on_minute_bars)
+                tWS = threading.Thread(
+                    target=self.live_conn.run, args=[['AM.' + self.symbol]])
+                tWS.start()
 
             while len(self.normalized_asset_data) == self.current_step:
-                # wait for new data to be appended
+                # Wait for new data to be appended
                 continue
 
         offset = self.current_step+1 - self.observation_size
@@ -816,10 +829,11 @@ class StockTradingEnv(gym.Env):
         self.cash = [self.base_value]
         self.positions = [(0, 0.0)]
         self.rewards = [0.0]
+        observation = self._next_observation()
         self.max_qty = int((self.base_value
                             / self.asset_data.iloc[self.current_step]['open']))
 
-        return self._next_observation()
+        return observation
 
     def render(self, mode='human', close=False):
         """Render the environment to the screen"""
