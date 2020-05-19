@@ -460,6 +460,8 @@ class StockTradingEnv(gym.Env):
             str(today.date())).df['volume'].mean()
         )
 
+        self.normalized_asset_data = self._normalize_data()
+
     def _initialize_data(self, filename):
         """Initializes environment data from files in path"""
 
@@ -496,12 +498,13 @@ class StockTradingEnv(gym.Env):
                 new_row,
                 ignore_index=True
             )
-            self._normalize_data()
+            self.normalized_asset_data = self._normalize_data()
 
     def _next_observation(self):
         """Get the stock data for the current observation size."""
 
         if self.mode != 'backtest':
+            # TODO bug if market is already open
             if not self.market.is_open:
                 tAMO = threading.Thread(target=self._await_market_open)
                 tAMO.start()
@@ -509,7 +512,7 @@ class StockTradingEnv(gym.Env):
 
                 # At 9:30AM EDT, subscribe to polygon websocket
                 print('Joining websocket...')
-                _on_minute_bars =\
+                self._on_minute_bars =\
                     self.live_conn.on(r'AM$')(self._on_minute_bars)
                 tWS = threading.Thread(
                     target=self.live_conn.run, args=[['AM.' + self.symbol]])
@@ -847,6 +850,7 @@ class StockTradingEnv(gym.Env):
             window_size=LOOKBACK_WINDOW_SIZE)
 
     def close(self):
+        # TODO unsubscribe symbol from websocket
         if self.mode != 'backtest':
             # Ensure no positions are held over night
             tOrder = threading.Thread(
