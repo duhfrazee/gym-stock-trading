@@ -24,8 +24,6 @@ DOWN_COLOR = '#EF534F'
 UP_TEXT_COLOR = '#73D3CC'
 DOWN_TEXT_COLOR = '#DC2C27'
 
-# TODO fix chart class with str dates
-
 
 class Chart():
     """A stock chart visualization using matplotlib
@@ -267,25 +265,30 @@ class StockTradingEnv(gym.Env):
     metadata = {'render.modes': ['human']}
     visualization = None
 
-    def __init__(self, filepath=None,
+    def __init__(self, market_data, previous_closes, daily_avg_volume=None,
                  observation_size=1, volume_enabled=True,
-                 random_data_selection=True, allotted_amount=10000.0):
+                 allotted_amount=10000.0):
         super(StockTradingEnv, self).__init__()
 
-        self.current_step = 0
+        # TODO type check all variables
+        # market_data: generator
+        # previous_close: generator
+        # daily avg volume: int
         self.current_episode = 0
+        self.current_step = 0
 
-        self.path = filepath
-        self.filename = ''
-        self.current_filename = ''
-
-        self.volume_enabled = volume_enabled
-        self.random_data_selection = random_data_selection
+        self.market_data = market_data
         self.asset_data = None
         self.normalized_asset_data = None
+
+        self.previous_closes = previous_closes
         self.previous_close = None
-        self.daily_avg_volume = None
+
         self.observation_size = observation_size
+        self.volume_enabled = volume_enabled
+
+        if self.volume_enabled:
+            self.daily_avg_volume = daily_avg_volume
 
         self.base_value = allotted_amount
         self.equity = [allotted_amount]
@@ -325,46 +328,11 @@ class StockTradingEnv(gym.Env):
 
         return normalized_dataframe
 
-    def _initialize_data(self, filename):
-        """Initializes environment data from files in path"""
+    def _initialize_data(self):
+        """Initializes environment market data"""
 
-        files = os.listdir(self.path)
-        files = [fi for fi in files if fi.endswith(".csv")]
-
-        if self.random_data_selection and filename == '':
-            filename = random.choice(files)
-
-        elif not self.random_data_selection and filename == '':
-            if self.current_episode >= len(files):
-                self.current_episode = 0
-
-            filename = sorted(files)[self.current_episode]
-
-        if filename[-4:] != '.csv':
-            raise TypeError('File must be .csv')
-
-        self.current_episode += 1
-
-        # Convert to data frame
-        asset_data = pd.read_csv(self.path + filename)
-        asset_data['timestamp'] = pd.to_datetime(asset_data['timestamp'])
-
-        files = os.listdir(self.path + 'day/')
-        files = [fi for fi in files if fi.endswith(".csv")]
-
-        daily_data = pd.read_csv(self.path + 'day/' + files[0])
-        daily_data['timestamp'] = pd.to_datetime(daily_data['timestamp'])
-
-        date = asset_data.iloc[0]['timestamp']
-
-        self.previous_close = daily_data[
-            daily_data['timestamp'] < date]['close'].iloc[-2]
-
-        # TODO should include most recent day but data was incomplete
-        self.daily_avg_volume = int(daily_data['volume'].iloc[-31:-1].mean())
-
-        self.filename = filename
-        self.asset_data = asset_data
+        self.previous_close = next(self.previous_closes)
+        self.asset_data = next(self.market_data)
         self.normalized_asset_data = self._normalize_data()
 
     def _next_observation(self):
@@ -381,21 +349,21 @@ class StockTradingEnv(gym.Env):
             offset = 0
 
         observation = np.array([
-            self.normalized_asset_data.loc[
-                offset: self.current_step]['open'].values,
-            self.normalized_asset_data.loc[
-                offset: self.current_step]['high'].values,
-            self.normalized_asset_data.loc[
-                offset: self.current_step]['low'].values,
-            self.normalized_asset_data.loc[
-                offset: self.current_step]['close'].values
+            self.normalized_asset_data.iloc[
+                offset: self.current_step+1]['open'].values,
+            self.normalized_asset_data.iloc[
+                offset: self.current_step+1]['high'].values,
+            self.normalized_asset_data.iloc[
+                offset: self.current_step+1]['low'].values,
+            self.normalized_asset_data.iloc[
+                offset: self.current_step+1]['close'].values
         ])
 
         if self.volume_enabled:
             observation = np.vstack((
                 observation,
-                self.normalized_asset_data.loc[
-                    offset: self.current_step]['volume'].values
+                self.normalized_asset_data.iloc[
+                    offset: self.current_step+1]['volume'].values
             ))
 
         if observation.shape[1] < self.observation_size:
@@ -553,25 +521,21 @@ class StockTradingEnv(gym.Env):
 
         return obs, reward, done, {}
 
-    def reset(self, filename=''):
+    def reset(self):
         """Reset the state of the environment to an initial state"""
         self.current_step = 0
 
-        try:
-            self._initialize_data(filename)
-        except TypeError:
-            return TypeError('File must be .csv')
+        self._initialize_data()
 
         self.equity = [self.base_value]
         self.profit_loss = [0.0]
         self.cash = [self.base_value]
         self.positions = [(0, 0.0)]
         self.rewards = [0.0]
-        observation = self._next_observation()
         self.max_qty = int((self.base_value
                             / self.asset_data.iloc[self.current_step]['open']))
 
-        return observation
+        return self._next_observation()
 
     def render(self, mode='human', close=False):
         """Render the environment to the screen"""

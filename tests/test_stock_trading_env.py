@@ -12,18 +12,23 @@ import pandas as pd
 # test await market open (already created)
 # test more without volume enabled
 
+# test several episodes
+# test generators!!
+
 
 class TestStockTradingEnv(unittest.TestCase):
     def setUp(self):
-        self.path =\
-            '/Users/d/Documents/Projects/Python/openai/gym-stock-trading/tests/test_data/'
-        self.env = gym.make(
-            'gym_stock_trading:StockTrading-v0', filepath=self.path)
-
-        self.filename = 'TSLA2019-04-04.csv'
-
         self.previous_close = 291.81
         self.daily_avg_volume = 31140787
+
+        self.market_data = self._yield_test_market_data(['TSLA2019-04-04.csv'])
+        self.previous_closes = self._yield_test_previous_closes([self.previous_close])
+        self.env = gym.make(
+            'gym_stock_trading:StockTrading-v0',
+            market_data=self.market_data,
+            previous_closes=self.previous_closes,
+            daily_avg_volume=self.daily_avg_volume
+        )
 
         step0_open = 261.89
         step0_high = 262.77
@@ -103,6 +108,8 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertEqual(reward, 0.0)
         self.assertEqual(max_qty, None)
 
+        # self.assertEqual(type(self.env.market_data), generator)
+
     def test_default_reset(self):
         obs = self._reset_env()
 
@@ -133,7 +140,9 @@ class TestStockTradingEnv(unittest.TestCase):
         for i in range(2, 11):
             self.env = gym.make(
                 'gym_stock_trading:StockTrading-v0',
-                filepath=self.path,
+                market_data=self.market_data,
+                previous_closes=self.previous_closes,
+                daily_avg_volume=self.daily_avg_volume,
                 observation_size=i
             )
 
@@ -168,7 +177,9 @@ class TestStockTradingEnv(unittest.TestCase):
         for i in range(2, 11):
             self.env = gym.make(
                 'gym_stock_trading:StockTrading-v0',
-                filepath=self.path,
+                market_data=self.market_data,
+                previous_closes=self.previous_closes,
+                daily_avg_volume=self.daily_avg_volume,
                 observation_size=i
             )
 
@@ -192,7 +203,9 @@ class TestStockTradingEnv(unittest.TestCase):
         for obs_size in range(2, 11):
             self.env = gym.make(
                 'gym_stock_trading:StockTrading-v0',
-                filepath=self.path,
+                market_data=self.market_data,
+                previous_closes=self.previous_closes,
+                daily_avg_volume=self.daily_avg_volume,
                 observation_size=obs_size
             )
 
@@ -218,16 +231,16 @@ class TestStockTradingEnv(unittest.TestCase):
                     offset = 0
 
                 correct_obs = np.array([
-                    self.env.normalized_asset_data.loc[
-                        offset: step]['open'].values,
-                    self.env.normalized_asset_data.loc[
-                        offset: step]['high'].values,
-                    self.env.normalized_asset_data.loc[
-                        offset: step]['low'].values,
-                    self.env.normalized_asset_data.loc[
-                        offset: step]['close'].values,
-                    self.env.normalized_asset_data.loc[
-                        offset: step]['volume'].values,
+                    self.env.normalized_asset_data.iloc[
+                        offset: step+1]['open'].values,
+                    self.env.normalized_asset_data.iloc[
+                        offset: step+1]['high'].values,
+                    self.env.normalized_asset_data.iloc[
+                        offset: step+1]['low'].values,
+                    self.env.normalized_asset_data.iloc[
+                        offset: step+1]['close'].values,
+                    self.env.normalized_asset_data.iloc[
+                        offset: step+1]['volume'].values,
                 ])
 
                 if correct_obs.shape[1] < obs_size:
@@ -668,83 +681,51 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertEqual(self.env.cash[-1], cash)
         self.assertAlmostEqual(self.env.equity[-1], cash + curr_stock_value)
 
-    def test_sequential_data_initialization(self):
-        env = gym.make(
-            'gym_stock_trading:StockTrading-v0',
-            filepath=self.path,
-            random_data_selection=False
-        )
-
-        for i in range(102):
-            directory_size = len(os.listdir(self.path))
-            directory = sorted(os.listdir(self.path))
-
-            correct_file = directory[i % directory_size]
-
-            if correct_file[-4:] != '.csv':
-                i -= 1
-                continue
-
-            env.reset()
-
-            self.assertEqual(env.filename, correct_file)
-
-    def test_inititalize_data_for_non_csv_file_types(self):
-        self.env.reset('.DS_Store')
-        self.assertRaises(TypeError)
-
-    def test_previous_close_for_backtest_over_several_episodes(self):
-        env = gym.make(
-            'gym_stock_trading:StockTrading-v0',
-            filepath=self.path,
-            random_data_selection=False
-        )
-
+    def test_previous_close_over_several_episodes(self):
         previous_closes = [279.18, 252.48, 267.53, 301.15, 342.95]
+        files = [
+            'TSLA2018-03-28.csv',
+            'TSLA2018-04-03.csv',
+            'TSLA2018-04-04.csv',
+            'TSLA2018-05-03.csv',
+            'TSLA2018-07-02.csv'
+        ]
+        self.env = gym.make(
+            'gym_stock_trading:StockTrading-v0',
+            market_data=self._yield_test_market_data(files),
+            previous_closes=self._yield_test_previous_closes(previous_closes),
+            daily_avg_volume=self.daily_avg_volume
+        )
 
         for correct_close in previous_closes:
             done = False
-            env.reset()
+            self.env.reset()
             while not done:
-                _, _, done, _ = env.step(np.array([0.0]))
-            self.assertEqual(env.previous_close, correct_close)
+                _, _, done, _ = self.env.step(np.array([0.0]))
+            self.assertEqual(self.env.previous_close, correct_close)
 
-    def test_random_data_selection_equals_false(self):
-        env = gym.make(
-            'gym_stock_trading:StockTrading-v0',
-            filepath=self.path,
-            random_data_selection=False
-        )
+    def _yield_test_market_data(self, files):
 
-        files = os.listdir(self.path)
-        files = [fi for fi in files if fi.endswith(".csv")]
-        files = sorted(files)
+        while True:
+            for filename in files:
+                path =\
+                    '/Users/d/Documents/Projects/Python/openai/gym-stock-trading/tests/test_data/'
+                # Convert to data frame
+                asset_data = pd.read_csv(path + filename)
+                asset_data['timestamp'] = pd.to_datetime(asset_data['timestamp'])
+                asset_data.set_index('timestamp', inplace=True)
+                yield asset_data
 
-        for correct_filename in files:
-            done = False
-            env.reset()
-            while not done:
-                _, _, done, _ = env.step(np.array([0.0]))
-            self.assertEqual(env.filename, correct_filename)
-
-    def _initialize_data(self):
-
-        """Creates a DataFrame from csv file.
-
-        Returns:
-            pd.DataFrame -- 1min candle stick data (including volume) for 1 day
-        """
-
-        # convert to data frame
-        asset_data = pd.read_csv(self.path + self.filename)
-
-        return asset_data
+    def _yield_test_previous_closes(self, previous_closes):
+        while True:
+            for previous_close in previous_closes:
+                yield previous_close
 
     def _calculate_short_equity_value(self, shares, avg_price, curr_price):
         return abs(shares) * (avg_price - (curr_price - avg_price))
 
     def _reset_env(self):
-        return self.env.reset(self.filename)
+        return self.env.reset()
 
 
 if __name__ == '__main__':
