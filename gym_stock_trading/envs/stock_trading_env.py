@@ -5,10 +5,7 @@ including matplotlib visualizations.
 import datetime
 import os
 import random
-import threading
-import time
 
-import alpaca_trade_api as tradeapi
 import gym
 import matplotlib
 import matplotlib.pyplot as plt
@@ -16,11 +13,9 @@ import matplotlib.dates as mdates
 import numpy as np
 import pandas as pd
 
-from datetime import timedelta
 from gym import error, spaces, utils
 from gym.utils import seeding
 from mplfinance.original_flavor import candlestick_ochl as candlestick
-from pytz import timezone
 
 LOOKBACK_WINDOW_SIZE = 40
 VOLUME_CHART_HEIGHT = 0.33
@@ -28,15 +23,6 @@ UP_COLOR = '#27A59A'
 DOWN_COLOR = '#EF534F'
 UP_TEXT_COLOR = '#73D3CC'
 DOWN_TEXT_COLOR = '#DC2C27'
-
-try:
-    PAPER_APCA_API_KEY_ID = os.environ['PAPER_APCA_API_KEY_ID']
-    PAPER_APCA_API_SECRET_KEY = os.environ['PAPER_APCA_API_SECRET_KEY']
-    PAPER_APCA_API_BASE_URL = 'https://paper-api.alpaca.markets'
-    LIVE_APCA_API_KEY_ID = os.environ['LIVE_APCA_API_KEY_ID']
-    LIVE_APCA_API_SECRET_KEY = os.environ['LIVE_APCA_API_SECRET_KEY']
-except KeyError:
-    pass
 
 # TODO fix chart class with str dates
 
