@@ -693,17 +693,6 @@ class TestStockTradingEnv(unittest.TestCase):
         self.env.reset('.DS_Store')
         self.assertRaises(TypeError)
 
-    def test_await_market_open(self):
-        env = gym.make(
-            'gym_stock_trading:StockTrading-v0',
-            mode='paper',
-            symbol='TSLA'
-        )
-
-        # env.reset()
-        # _ = env.step(np.array([0.0]))
-        pass
-
     def test_previous_close_for_backtest_over_several_episodes(self):
         env = gym.make(
             'gym_stock_trading:StockTrading-v0',

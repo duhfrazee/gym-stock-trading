@@ -1,3 +1,9 @@
+
+# Class data_websocket
+# class alpaca_websocket
+
+# use info to return what trades were made and at what price etc
+
 """
 This module is a stock trading environment for OpenAI gym
 including matplotlib visualizations.
@@ -280,8 +286,9 @@ class StockTradingEnv(gym.Env):
 
     metadata = {'render.modes': ['human']}
     visualization = None
+    eastern = timezone('US/Eastern')
 
-    def __init__(self, filepath=None,
+    def __init__(self, mode='backtest', symbol=None, filepath=None,
                  observation_size=1, volume_enabled=True,
                  random_data_selection=True, allotted_amount=10000.0):
         super(StockTradingEnv, self).__init__()
@@ -289,9 +296,33 @@ class StockTradingEnv(gym.Env):
         self.current_step = 0
         self.current_episode = 0
 
-        self.path = filepath
-        self.filename = ''
-        self.current_filename = ''
+        self.mode = mode
+
+        if self.mode == 'backtest':
+            self.path = filepath
+            self.filename = ''
+            self.current_filename = ''
+        else:
+            self.symbol = symbol
+            self.market = None
+
+            self.paper = tradeapi.REST(
+                PAPER_APCA_API_KEY_ID,
+                PAPER_APCA_API_SECRET_KEY,
+                PAPER_APCA_API_BASE_URL,
+                api_version='v2'
+            )
+
+            self.live = tradeapi.REST(
+                LIVE_APCA_API_KEY_ID,
+                LIVE_APCA_API_SECRET_KEY,
+                api_version='v2'
+            )
+
+            self.live_conn = tradeapi.StreamConn(
+                LIVE_APCA_API_KEY_ID,
+                LIVE_APCA_API_SECRET_KEY
+            )
 
         self.volume_enabled = volume_enabled
         self.random_data_selection = random_data_selection
@@ -339,9 +370,7 @@ class StockTradingEnv(gym.Env):
 
         return normalized_dataframe
 
-    def _initialize_data(self, filename):
-        """Initializes environment data from files in path"""
-
+    def _initialize_backtest_data(self, filename):
         files = os.listdir(self.path)
         files = [fi for fi in files if fi.endswith(".csv")]
 
@@ -381,8 +410,123 @@ class StockTradingEnv(gym.Env):
         self.asset_data = asset_data
         self.normalized_asset_data = self._normalize_data()
 
+    def _initialize_live_data(self):
+        self.market = self.live.get_clock()
+
+        today = datetime.datetime.now(self.eastern)
+
+        if self.market.is_open:
+            _open = int(self.eastern.localize(
+                datetime.datetime.combine(
+                    today,
+                    datetime.time(9, 30)
+                )
+            ).timestamp() * 1000)
+        else:
+            _open = int(self.market.next_open.timestamp() * 1000)
+
+        close = int(self.market.next_close.timestamp() * 1000)
+
+        self.asset_data = self.live.polygon.historic_agg_v2(
+            self.symbol, 1, 'minute', _open, close).df
+
+        self.current_step = len(self.asset_data)
+
+        if not self.market.is_open\
+                and self.market.next_close.date() != today.date():
+            # Get previous market day (including today) from alpaca calendar
+            _from = today.date() - timedelta(days=7)
+            to = today.date()
+
+            cal = self.live.get_calendar(_from, to)
+            previous_close_date = cal[-1].date.date()
+        else:
+            # Get previous market day from alpaca calendar
+            _from = today.date() - timedelta(days=7)
+            to = today.date() - timedelta(days=1)
+
+            cal = self.live.get_calendar(_from, to)
+
+            previous_close_date = cal[-1].date.date()
+
+        previous_close_date_plus_one = previous_close_date + timedelta(days=1)
+
+        self.previous_close = self.live.polygon.historic_agg_v2(
+            self.symbol,
+            1,
+            'day',
+            str(previous_close_date),
+            str(previous_close_date_plus_one)
+        ).df['close'][0]
+
+        today_minus_30 = today.date() - timedelta(days=30)
+        self.daily_avg_volume = int(self.live.polygon.historic_agg_v2(
+            self.symbol, 1, 'day',
+            str(today_minus_30),
+            str(today.date())).df['volume'].mean()
+        )
+
+        self.normalized_asset_data = self._normalize_data()
+
+    def _initialize_data(self, filename):
+        """Initializes environment data from files in path"""
+
+        if self.mode == 'backtest':
+            self._initialize_backtest_data(filename)
+        else:
+            self._initialize_live_data()
+
+    def _await_market_open(self):
+        while not self.market.is_open:
+            curr_time = datetime.datetime.now(self.eastern)
+            next_open = self.market.next_open.astimezone(self.eastern)
+            wait_time = (next_open-curr_time).seconds
+
+            print('Waiting ' + str(wait_time) + ' seconds for market to open.')
+
+            time.sleep(wait_time)
+            self.market = self.live.get_clock()
+
+    async def _on_minute_bars(self, conn, channel, bar):
+        if bar.symbol == self.symbol:
+            new_row = {
+                'timestamp': datetime.datetime.fromtimestamp(
+                    bar.start,
+                    self.eastern
+                ),
+                'open': bar.open,
+                'high': bar.high,
+                'low': bar.low,
+                'close': bar.close,
+                'volume': bar.volume
+            }
+            self.asset_data = self.asset_data.append(
+                new_row,
+                ignore_index=True
+            )
+            self.normalized_asset_data = self._normalize_data()
+
     def _next_observation(self):
         """Get the stock data for the current observation size."""
+
+        if self.mode != 'backtest':
+            # TODO bug if market is already open
+            if not self.market.is_open:
+                tAMO = threading.Thread(target=self._await_market_open)
+                tAMO.start()
+                tAMO.join()
+
+                # At 9:30AM EDT, subscribe to polygon websocket
+                print('Joining websocket...')
+                self._on_minute_bars =\
+                    self.live_conn.on(r'AM$')(self._on_minute_bars)
+                tWS = threading.Thread(
+                    target=self.live_conn.run, args=[['AM.' + self.symbol]])
+                tWS.start()
+
+            while len(self.normalized_asset_data) == self.current_step:
+                # Wait for new data to be appended
+                continue
 
         offset = self.current_step+1 - self.observation_size
 
@@ -418,6 +562,60 @@ class StockTradingEnv(gym.Env):
 
         return observation
 
+    def _submit_order(self, qty, order_type='market'):
+        if qty == 0:
+            # no trade needed
+            return
+
+        side = 'buy' if qty > 0 else 'sell'
+
+        try:
+            if self.mode == 'live':
+                self.live.submit_order(
+                    symbol=self.symbol,
+                    qty=abs(qty),
+                    side=side,
+                    type=order_type,
+                    time_in_force='day'
+                )
+            elif self.mode == 'paper':
+                self.paper.submit_order(
+                    symbol=self.symbol,
+                    qty=abs(qty),
+                    side=side,
+                    type=order_type,
+                    time_in_force='day'
+                )
+        # TODO log difference between close price and filled price
+        except Exception as e:
+            # TODO return error
+            # check for:
+            # 403 Forbidden: Buying power or shares is not sufficient.
+            # 422 Unprocessable: Input parameters are not recognized.
+            return e
+
+    def _close_position(self):
+        try:
+            if self.mode == 'live':
+                position = self.live.get_position(symbol=self.symbol)
+            elif self.mode == 'paper':
+                position = self.live.get_position(symbol=self.symbol)
+
+            if position.side == 'long':
+                trade_qty = -int(position.qty)
+            else:
+                trade_qty = int(position.qty)
+
+            tOrder = threading.Thread(
+                target=self._submit_order, args=[trade_qty])
+            tOrder.start()
+            tOrder.join()
+
+        except Exception as e:
+            if str(e) != 'position does not exist':
+                # TODO return error
+                return e
+
     def _take_action(self, action):
         curr_price = self.asset_data.iloc[self.current_step]['close']
 
@@ -441,6 +639,12 @@ class StockTradingEnv(gym.Env):
             self.equity.append(self.cash[-1] + purchase_amount)
             self.profit_loss.append(0.0)
 
+            if self.mode != 'backtest':
+                # Submit order
+                tOrder = threading.Thread(
+                    target=self._submit_order, args=[trade_qty])
+                tOrder.start()
+
         elif curr_qty > 0 and curr_qty + trade_qty < 0 or\
                 curr_qty < 0 and curr_qty + trade_qty > 0:
             # Trade crosses from short to long or long to short
@@ -451,6 +655,11 @@ class StockTradingEnv(gym.Env):
                 self.cash.append(self.cash[-1] + curr_qty * curr_price)
                 self.profit_loss.append((curr_price - avg_price) * curr_qty)
 
+                if self.mode != 'backtest':
+                    tOrder = threading.Thread(
+                        target=self._close_position)
+                    tOrder.start()
+                    tOrder.join()
             else:
                 # Closing short position
                 self.cash.append(
@@ -461,6 +670,12 @@ class StockTradingEnv(gym.Env):
                 self.profit_loss.append(
                     (avg_price - curr_price) * abs(curr_qty))
 
+                if self.mode != 'backtest':
+                    tOrder = threading.Thread(
+                        target=self._close_position)
+                    tOrder.start()
+                    tOrder.join()
+
             # Simple short or long trade
             trade_qty += curr_qty
             purchase_amount = abs(trade_qty * curr_price)
@@ -469,6 +684,11 @@ class StockTradingEnv(gym.Env):
             self.cash.append(self.cash[-1] - purchase_amount)
             self.equity.append(self.cash[-1] + purchase_amount)
 
+            if self.mode != 'backtest':
+                # Submit order
+                tOrder = threading.Thread(
+                    target=self._submit_order, args=[trade_qty])
+                tOrder.start()
         else:
             # Trade increases or reduces position (including closing out)
 
@@ -504,6 +724,12 @@ class StockTradingEnv(gym.Env):
                         + abs(total_qty)
                         * (avg_price - (curr_price - avg_price))
                     )
+
+                if self.mode != 'backtest':
+                    # Submit order
+                    tOrder = threading.Thread(
+                        target=self._submit_order, args=[trade_qty])
+                    tOrder.start()
 
             # Reducing position or not changing
             else:
@@ -542,6 +768,12 @@ class StockTradingEnv(gym.Env):
                         * (avg_price - (curr_price - avg_price))
                     )
 
+                if self.mode != 'backtest':
+                    # Submit order
+                    tOrder = threading.Thread(
+                        target=self._submit_order, args=[trade_qty])
+                    tOrder.start()
+
     def step(self, action):
         # Execute one time step within the environment
         self._take_action(action)
@@ -558,12 +790,37 @@ class StockTradingEnv(gym.Env):
         self.equity[-1] += reward
         self.rewards.append(reward)
 
-        # Episode ends when down 5% or DataFrame ends
-        if self.current_step + 1 == len(self.asset_data):
-            done = True
+        if self.mode == 'backtest':
+            # Episode ends when down 5% or DataFrame ends
+            if self.current_step + 1 == len(self.asset_data):
+                done = True
+            else:
+                done = True if self.equity[-1] / self.base_value <= -0.05\
+                            else False
         else:
-            done = True if self.equity[-1] / self.base_value <= -0.05\
-                        else False
+            # Close 11 minutes before end of day
+            now = datetime.datetime.now(self.eastern)
+
+            stop_time = self.eastern.localize(
+                datetime.datetime.combine(
+                    now,
+                    datetime.time(3, 49)
+                )
+            )
+
+            if now > stop_time:
+                tOrder = threading.Thread(
+                    target=self._close_position)
+                tOrder.start()
+                done = True
+            # TODO this needs to be more reflective of real data in future
+            elif self.equity[-1] / self.base_value <= -0.05:
+                tOrder = threading.Thread(
+                    target=self._close_position)
+                tOrder.start()
+                done = True
+            else:
+                done = False
 
         return obs, reward, done, {}
 
@@ -599,4 +856,12 @@ class StockTradingEnv(gym.Env):
             window_size=LOOKBACK_WINDOW_SIZE)
 
     def close(self):
-        pass
+        # TODO unsubscribe symbol from websocket
+        if self.mode != 'backtest':
+            # Ensure no positions are held over night
+            tOrder = threading.Thread(
+                target=self._close_position)
+            tOrder.start()
+            tOrder.join()
+
+            self.live.cancel_all_orders()
