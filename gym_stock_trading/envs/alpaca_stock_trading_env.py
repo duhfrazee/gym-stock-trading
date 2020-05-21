@@ -1,12 +1,6 @@
-
-# Class data_websocket
-# class alpaca_websocket
-
-# use info to return what trades were made and at what price etc
-
 """
 This module is a stock trading environment for OpenAI gym
-including matplotlib visualizations.
+utilizing Alpaca for live and paper trading.
 """
 import datetime
 import os
@@ -22,6 +16,7 @@ import pandas as pd
 from datetime import timedelta
 from gym import error, spaces, utils
 from gym.utils import seeding
+from gym_stock_trading.envs.helpers.stream import Stream
 from pytz import timezone
 
 try:
@@ -200,7 +195,6 @@ class AlpacaStockTradingEnv(gym.Env):
     async def _on_minute_bars(self, conn, channel, bar):
         if self.normalized_asset_data is not None:
             if bar.symbol == self.symbol:
-                # TODO determine format of bar.start
 
                 if len(self.asset_data) != 0:
                     # TODO test
@@ -210,7 +204,6 @@ class AlpacaStockTradingEnv(gym.Env):
                             + timedelta(seconds=90):
                         self._initialize_data()
 
-                # TODO ensure index remains datetime
                 new_row = {
                     'open': bar.open,
                     'high': bar.high,
@@ -222,11 +215,33 @@ class AlpacaStockTradingEnv(gym.Env):
                 self.normalized_asset_data = self._normalize_data()
 
     async def _on_trade_updates(self, conn, channel, account):
-        if order.symbol == self.symbol:
-            # get order updates for symbol
-            # update alpaca positions correctly.
-            # if side short, make qty negative
-            pass
+        event = account.event
+        order = account.order
+        if order['symbol'] == self.symbol:
+            if event == 'fill' or event == 'partial_fill':
+                if order['side'] == 'buy':
+                    fill_qty = int(account.qty)
+                else:
+                    fill_qty = -int(account.qty)
+
+                fill_price = float(account.price)
+                position_qty = int(account.position_qty)
+                curr_qty = self.current_alpaca_position[0]
+                curr_avg_price = self.current_alpaca_position[1]
+
+                if position_qty != 0:
+                    if curr_qty >= 0 and fill_qty > 0\
+                            or curr_qty <= 0 and fill_qty < 0:
+                        avg_price = (
+                            (abs(fill_qty) * fill_price)
+                            + (abs(curr_qty) * curr_avg_price)
+                        ) / abs(position_qty)
+                    else:
+                        avg_price = curr_avg_price
+                else:
+                    avg_price = 0.0
+
+                self.current_alpaca_position = (position_qty, avg_price)
 
     def _next_observation(self):
         """Get the stock data for the current observation size."""
@@ -549,8 +564,6 @@ class AlpacaStockTradingEnv(gym.Env):
         pass
 
     def close(self):
-        # TODO unsubscribe symbol from websocket
-        self.stream.unsubscribe(self.symbol)
         # Ensure no positions are held over night
         tOrder = threading.Thread(
             target=self._close_position)
@@ -558,4 +571,3 @@ class AlpacaStockTradingEnv(gym.Env):
         tOrder.join()
 
         # TODO figure out how to cancel open orders
-

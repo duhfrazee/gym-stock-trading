@@ -1,3 +1,4 @@
+import asyncio
 import os
 import threading
 
@@ -19,11 +20,11 @@ except KeyError:
 class Stream():
     paper_channels = ['trade_updates']
     live_channels = ['trade_updates']
-    self.live_conn = tradeapi.StreamConn(
+    live_conn = tradeapi.StreamConn(
         LIVE_APCA_API_KEY_ID,
         LIVE_APCA_API_SECRET_KEY
     )
-    self.paper_conn = tradeapi.StreamConn(
+    paper_conn = tradeapi.StreamConn(
         PAPER_APCA_API_KEY_ID,
         PAPER_APCA_API_SECRET_KEY,
         PAPER_APCA_API_BASE_URL
@@ -31,46 +32,57 @@ class Stream():
 
     def __init__(self, symbol, live):
         self.live = live
+        channel = 'AM.' + symbol
+        if self.live:
+            self.live_channels.append(channel)
+        else:
+            self.paper_channels.append(channel)
         self.start()
-        self.subscribe(symbol)
+
+        # self.paper_conn.loop.run_until_complete(self.subscribe(symbol))
 
     def start(self):
         # TODO test that both can be running at once
         try:
             if self.live:
-                tWS = threading.Thread(
+                tLWS = threading.Thread(
                     target=self.live_conn.run, args=[self.live_channels])
-                tWS.start()
+                tLWS.start()
             else:
-                tWS = threading.Thread(
+                tPWS = threading.Thread(
                     target=self.paper_conn.run, args=[self.paper_channels])
-                tWS.start()
+                tPWS.start()
         except RuntimeError as e:
             # Already running
-            print(e)
+            pass
 
-    def subscribe(self, symbol):
-        channel = 'AM.' + symbol
-        # TODO test this
-        if self.live:
-            if channel not in self.live_channels:
-                self.live_channels.append(channel)
-                self.live_conn.subscribe(channel)
-        else:
-            if channel not in self.paper_channels:
-                self.paper_channels.append(channel)
-                self.paper_conn.subscribe(channel)
+    # async def subscribe(self, symbol):
+    #     channel = 'AM.' + symbol
+    #     # TODO test this
+    #     if self.live:
+    #         if channel not in self.live_channels:
+    #             self.live_channels.append(channel)
+    #             await self.live_conn.subscribe([channel])
+    #     else:
+    #         if channel not in self.paper_channels:
+    #             self.paper_channels.append(channel)
+    #             await self.paper_conn.subscribe([channel])
 
-    def unsubscribe(self, symbol):
-        channel = 'AM.' + symbol
-        if channel in self.channels:
-            self.channels.remove(channel)
-            # TODO test this
-            if self.live:
-                self.live_conn.unsubscribe(channel)
-            else:
-                self.paper_conn.unsubscribe(channel)
+    # async def unsubscribe(self, symbol):
+    #     channel = 'AM.' + symbol
+    #     if self.live:
+    #         if channel in self.live_channels:
+    #             self.live_channels.remove(channel)
+    #             await self.live_conn.unsubscribe(channel)
+    #     else:
+    #         if channel in self.paper_channels:
+    #             self.paper_channels.remove(channel)
+    #             await self.paper_conn.unsubscribe(channel)
 
     def close(self):
-        # Stop websocket
+        print('CLOSING')
+        # asyncio.get_event_loop().run_until_complete(self.live_conn.close())
+        # time.sleep(10)
+        # self.paper_conn.loop.run_until_complete(self.paper_conn.close())
+        # self.paper_conn.loop.close()
         pass
