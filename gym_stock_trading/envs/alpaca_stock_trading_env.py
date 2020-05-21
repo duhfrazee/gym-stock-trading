@@ -70,7 +70,6 @@ class AlpacaStockTradingEnv(gym.Env):
     """
 
     metadata = {'render.modes': ['human']}
-    visualization = None
     eastern = timezone('US/Eastern')
 
     # TODO in the future add data type here (min, 5min, etc)
@@ -100,8 +99,12 @@ class AlpacaStockTradingEnv(gym.Env):
             LIVE_APCA_API_SECRET_KEY,
             api_version='v2'
         )
-        # TODO websocket initialization
-        self.stream = Stream()
+
+        self.stream = Stream(self.symbol)
+        self._on_minute_bars =\
+            self.stream.live_conn.on(r'AM$')(self._on_minute_bars)
+        self._on_trade_updates =\
+            self.stream.live_conn.on(r'^trade_updates$')(self._on_trade_updates)
 
         self.volume_enabled = volume_enabled
         self.asset_data = None
@@ -117,6 +120,8 @@ class AlpacaStockTradingEnv(gym.Env):
         self.cash = [allotted_amount]
         self.profit_loss = [0.0]
         self.positions = [(0, 0.0)]     # (qty, price)
+        self.alpaca_posistions = [(0, 0.0)]  # actual traded positions
+        self.current_alpaca_position = (0, 0.0)
         self.rewards = [0.0]
         self.max_qty = None
 
@@ -186,49 +191,62 @@ class AlpacaStockTradingEnv(gym.Env):
             self.market = self.live.get_clock()
 
     async def _on_minute_bars(self, conn, channel, bar):
-        if bar.symbol == self.symbol:
-            # TODO determine format of bar.start
-            # TODO use this method to ensure the value it receives is the next value in asset_data
-            # keep in mind that the market could freeze
-            new_row = {
-                'timestamp': datetime.datetime.fromtimestamp(
-                    bar.start,
-                    self.eastern
-                ),
-                'open': bar.open,
-                'high': bar.high,
-                'low': bar.low,
-                'close': bar.close,
-                'volume': bar.volume
-            }
-            self.asset_data = self.asset_data.append(
-                new_row,
-                ignore_index=True
-            )
-            self.normalized_asset_data = self._normalize_data()
+        if self.normalized_asset_data is not None:
+            if bar.symbol == self.symbol:
+                # TODO determine format of bar.start
+                # TODO use this method to ensure the value it receives is the next value in asset_data
+                # keep in mind that the market could freeze
+                # if bar.start is before or equal last row, dont append
 
-    async def _on_trade_updates(self, conn, channel, bar):
-        pass
+                if len(self.asset_data) != 0:
+                    if bar.start <= self.asset_data.iloc[-1].index:
+                        # Bar already appended
+                        return
+
+                    # TODO test
+                    # Missing a bar or market is frozen
+                    if bar.start >\
+                            self.asset_data.iloc[-1].index\
+                            + timedelta(seconds=90):
+                        self._initialize_data()
+
+                # TODO ensure index remains datetime
+                new_row = {
+                    'timestamp': datetime.datetime.fromtimestamp(
+                        bar.start,
+                        self.eastern
+                    ),
+                    'open': bar.open,
+                    'high': bar.high,
+                    'low': bar.low,
+                    'close': bar.close,
+                    'volume': bar.volume
+                }
+                self.asset_data = self.asset_data.append(
+                    new_row,
+                    ignore_index=True
+                )
+                self.normalized_asset_data = self._normalize_data()
+        
+    async def _on_trade_updates(self, conn, channel, account):
+        if bar.symbol == self.symbol:
+            # get order updates for symbol
+            # update alpaca positions correctly.
+            # if side short, make qty negative
+            pass
 
     def _next_observation(self):
         """Get the stock data for the current observation size."""
         # TODO deal with difference in time from initialization to observation
 
-        # TODO bug if market is already open
         if not self.market.is_open:
             tAMO = threading.Thread(target=self._await_market_open)
             tAMO.start()
             tAMO.join()
 
-            # At 9:30AM EDT, subscribe to polygon websocket
-            print('Joining websocket...')
-            self._on_minute_bars =\
-                self.live_conn.on(r'AM$')(self._on_minute_bars)
-            # tWS = threading.Thread(
-            #     target=self.live_conn.run, args=[['AM.' + self.symbol]])
-            # tWS.start()
-
-        while len(self.normalized_asset_data) == self.current_step:
+        # TODO clean up with wait() or threading
+        # TODO test logic
+        while len(self.normalized_asset_data) !> self.current_step:
             # Wait for new data to be appended
             continue
 
@@ -299,32 +317,24 @@ class AlpacaStockTradingEnv(gym.Env):
             return e
 
     def _close_position(self):
-        try:
-            if self.live:
-                position = self.live.get_position(symbol=self.symbol)
-            else:
-                position = self.live.get_position(symbol=self.symbol)
+        if self.current_alpaca_position[0] != 0:
+            self.live.close_position(self.symbol)
 
-            if position.side == 'long':
-                trade_qty = -int(position.qty)
-            else:
-                trade_qty = int(position.qty)
-
-            tOrder = threading.Thread(
-                target=self._submit_order, args=[trade_qty])
-            tOrder.start()
-            tOrder.join()
-
-        except Exception as e:
-            if str(e) != 'position does not exist':
-                # TODO return error
-                return e
+            # TODO clean up with wait() or threading
+            while self.current_alpaca_position[0] != 0:
+                # wait for position to close
+                continue
 
     def _take_action(self, action):
         curr_price = self.asset_data.iloc[self.current_step]['close']
 
+        if self.positions[-1][0] != self.current_alpaca_position[0]:
+            print('Order did not complete..')
+            # TODO determine how to cancel incomplete orders
+            pass
+
         # Current position
-        curr_qty, avg_price = self.positions[-1]
+        curr_qty, avg_price = self.current_alpaca_position
         curr_invested = curr_qty / self.max_qty
 
         if action == 0:
@@ -487,6 +497,12 @@ class AlpacaStockTradingEnv(gym.Env):
         reward = (next_price - curr_price) * self.positions[-1][0]
         self.equity[-1] += reward
         self.rewards.append(reward)
+        self.alpaca_posistions.append(self.current_alpaca_position)
+
+        info = {
+            'Env Position': self.positions[-1],
+            'Actual Position': self.current_alpaca_position
+        }
 
         # TODO bugs here. Test > for dates
         # Close 11 minutes before end of day
@@ -513,7 +529,7 @@ class AlpacaStockTradingEnv(gym.Env):
         else:
             done = False
 
-        return obs, reward, done, {}
+        return obs, reward, done, info
 
     def reset(self):
         """Reset the state of the environment to an initial state"""
