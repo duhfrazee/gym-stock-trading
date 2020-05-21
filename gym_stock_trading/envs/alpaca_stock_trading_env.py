@@ -100,11 +100,18 @@ class AlpacaStockTradingEnv(gym.Env):
             api_version='v2'
         )
 
-        self.stream = Stream(self.symbol)
-        self._on_minute_bars =\
-            self.stream.live_conn.on(r'AM$')(self._on_minute_bars)
-        self._on_trade_updates =\
-            self.stream.live_conn.on(r'^trade_updates$')(self._on_trade_updates)
+        self.stream = Stream(self.symbol, self.live)
+
+        if self.live:
+            self._on_minute_bars =\
+                self.stream.live_conn.on(r'AM$')(self._on_minute_bars)
+            self._on_trade_updates =\
+                self.stream.live_conn.on(r'trade_updates$')(self._on_trade_updates)
+        else:
+            self._on_minute_bars =\
+                self.stream.paper_conn.on(r'AM$')(self._on_minute_bars)
+            self._on_trade_updates =\
+                self.stream.paper_conn.on(r'trade_updates$')(self._on_trade_updates)
 
         self.volume_enabled = volume_enabled
         self.asset_data = None
