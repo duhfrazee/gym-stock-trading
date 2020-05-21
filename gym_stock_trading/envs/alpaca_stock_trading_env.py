@@ -194,15 +194,8 @@ class AlpacaStockTradingEnv(gym.Env):
         if self.normalized_asset_data is not None:
             if bar.symbol == self.symbol:
                 # TODO determine format of bar.start
-                # TODO use this method to ensure the value it receives is the next value in asset_data
-                # keep in mind that the market could freeze
-                # if bar.start is before or equal last row, dont append
 
                 if len(self.asset_data) != 0:
-                    if bar.start <= self.asset_data.iloc[-1].index:
-                        # Bar already appended
-                        return
-
                     # TODO test
                     # Missing a bar or market is frozen
                     if bar.start >\
@@ -212,24 +205,17 @@ class AlpacaStockTradingEnv(gym.Env):
 
                 # TODO ensure index remains datetime
                 new_row = {
-                    'timestamp': datetime.datetime.fromtimestamp(
-                        bar.start,
-                        self.eastern
-                    ),
                     'open': bar.open,
                     'high': bar.high,
                     'low': bar.low,
                     'close': bar.close,
                     'volume': bar.volume
                 }
-                self.asset_data = self.asset_data.append(
-                    new_row,
-                    ignore_index=True
-                )
+                self.asset_data.loc[bar.start] = new_row
                 self.normalized_asset_data = self._normalize_data()
-        
+
     async def _on_trade_updates(self, conn, channel, account):
-        if bar.symbol == self.symbol:
+        if order.symbol == self.symbol:
             # get order updates for symbol
             # update alpaca positions correctly.
             # if side short, make qty negative
@@ -237,7 +223,6 @@ class AlpacaStockTradingEnv(gym.Env):
 
     def _next_observation(self):
         """Get the stock data for the current observation size."""
-        # TODO deal with difference in time from initialization to observation
 
         if not self.market.is_open:
             tAMO = threading.Thread(target=self._await_market_open)
@@ -246,7 +231,7 @@ class AlpacaStockTradingEnv(gym.Env):
 
         # TODO clean up with wait() or threading
         # TODO test logic
-        while len(self.normalized_asset_data) !> self.current_step:
+        while len(self.normalized_asset_data) <= self.current_step:
             # Wait for new data to be appended
             continue
 
@@ -308,8 +293,8 @@ class AlpacaStockTradingEnv(gym.Env):
                     type=order_type,
                     time_in_force='day'
                 )
-        # TODO log difference between close price and filled price
         except Exception as e:
+            print(e)
             # TODO return error
             # check for:
             # 403 Forbidden: Buying power or shares is not sufficient.
@@ -318,7 +303,10 @@ class AlpacaStockTradingEnv(gym.Env):
 
     def _close_position(self):
         if self.current_alpaca_position[0] != 0:
-            self.live.close_position(self.symbol)
+            if self.live:
+                self.live.close_position(self.symbol)
+            else:
+                self.paper.close_position(self.symbol)
 
             # TODO clean up with wait() or threading
             while self.current_alpaca_position[0] != 0:
@@ -504,14 +492,13 @@ class AlpacaStockTradingEnv(gym.Env):
             'Actual Position': self.current_alpaca_position
         }
 
-        # TODO bugs here. Test > for dates
         # Close 11 minutes before end of day
         now = datetime.datetime.now(self.eastern)
 
         stop_time = self.eastern.localize(
             datetime.datetime.combine(
                 now,
-                datetime.time(3, 49)
+                datetime.time(3, 49, self.eastern)
             )
         )
 
@@ -521,7 +508,7 @@ class AlpacaStockTradingEnv(gym.Env):
             tOrder.start()
             done = True
         # TODO this needs to be more reflective of real data in future
-        elif self.equity[-1] / self.base_value <= -0.05:
+        elif (self.equity[-1] - self.base_value) / self.base_value <= -0.05:
             tOrder = threading.Thread(
                 target=self._close_position)
             tOrder.start()
@@ -556,10 +543,12 @@ class AlpacaStockTradingEnv(gym.Env):
 
     def close(self):
         # TODO unsubscribe symbol from websocket
+        self.stream.unsubscribe(self.symbol)
         # Ensure no positions are held over night
         tOrder = threading.Thread(
             target=self._close_position)
         tOrder.start()
         tOrder.join()
 
-        self.live.cancel_all_orders()
+        # TODO figure out how to cancel open orders
+
