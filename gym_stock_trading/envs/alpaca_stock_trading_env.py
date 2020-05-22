@@ -16,7 +16,7 @@ import pandas as pd
 from datetime import timedelta
 from gym import error, spaces, utils
 from gym.utils import seeding
-from gym_stock_trading.envs.helpers.stream import Stream
+# from gym_stock_trading.envs.helpers.stream import Stream
 from pytz import timezone
 
 try:
@@ -66,6 +66,28 @@ class AlpacaStockTradingEnv(gym.Env):
 
     metadata = {'render.modes': ['human']}
     eastern = timezone('US/Eastern')
+    channels = ['trade_updates', 'AM.*']
+
+    live_conn = tradeapi.StreamConn(
+        LIVE_APCA_API_KEY_ID,
+        LIVE_APCA_API_SECRET_KEY
+    )
+    paper_conn = tradeapi.StreamConn(
+        PAPER_APCA_API_KEY_ID,
+        PAPER_APCA_API_SECRET_KEY,
+        PAPER_APCA_API_BASE_URL
+    )
+
+    try:
+        # tLWS = threading.Thread(
+        #     target=live_conn.run, args=[channels])
+        # tLWS.start()
+        tPWS = threading.Thread(
+            target=paper_conn.run, args=[channels])
+        tPWS.start()
+    except RuntimeError as e:
+        # Already running
+        pass
 
     # TODO in the future add data type here (min, 5min, etc)
     def __init__(self, symbol, previous_close, daily_avg_volume=None,
@@ -82,31 +104,31 @@ class AlpacaStockTradingEnv(gym.Env):
         self.symbol = symbol
         self.market = None
 
-        self.paper = tradeapi.REST(
+        self.paper_api = tradeapi.REST(
             PAPER_APCA_API_KEY_ID,
             PAPER_APCA_API_SECRET_KEY,
             PAPER_APCA_API_BASE_URL,
             api_version='v2'
         )
 
-        self.live = tradeapi.REST(
+        self.live_api = tradeapi.REST(
             LIVE_APCA_API_KEY_ID,
             LIVE_APCA_API_SECRET_KEY,
             api_version='v2'
         )
 
-        self.stream = Stream(self.symbol, self.live)
+        # self.stream = Stream(self.symbol, self.live)
 
         if self.live:
             self._on_minute_bars =\
-                self.stream.live_conn.on(r'AM$')(self._on_minute_bars)
+                self.live_conn.on(r'AM$')(self._on_minute_bars)
             self._on_trade_updates =\
-                self.stream.live_conn.on(r'trade_updates$')(self._on_trade_updates)
+                self.live_conn.on(r'trade_updates$')(self._on_trade_updates)
         else:
             self._on_minute_bars =\
-                self.stream.paper_conn.on(r'AM$')(self._on_minute_bars)
+                self.paper_conn.on(r'AM$')(self._on_minute_bars)
             self._on_trade_updates =\
-                self.stream.paper_conn.on(r'trade_updates$')(self._on_trade_updates)
+                self.paper_conn.on(r'trade_updates$')(self._on_trade_updates)
 
         self.volume_enabled = volume_enabled
         self.asset_data = None
@@ -122,7 +144,7 @@ class AlpacaStockTradingEnv(gym.Env):
         self.cash = [allotted_amount]
         self.profit_loss = [0.0]
         self.positions = [(0, 0.0)]     # (qty, price)
-        self.alpaca_posistions = [(0, 0.0)]  # actual traded positions
+        self.alpaca_positions = [(0, 0.0)]  # actual traded positions
         self.current_alpaca_position = (0, 0.0)
         self.rewards = [0.0]
         self.max_qty = None
@@ -158,7 +180,7 @@ class AlpacaStockTradingEnv(gym.Env):
         return normalized_dataframe
 
     def _initialize_data(self):
-        self.market = self.live.get_clock()
+        self.market = self.live_api.get_clock()
 
         today = datetime.datetime.now(self.eastern)
 
@@ -174,7 +196,7 @@ class AlpacaStockTradingEnv(gym.Env):
 
         close = int(self.market.next_close.timestamp() * 1000)
 
-        self.asset_data = self.live.polygon.historic_agg_v2(
+        self.asset_data = self.live_api.polygon.historic_agg_v2(
             self.symbol, 1, 'minute', _open, close).df
 
         self.current_step = len(self.asset_data)
@@ -190,29 +212,30 @@ class AlpacaStockTradingEnv(gym.Env):
             print('Waiting ' + str(wait_time) + ' seconds for market to open.')
 
             time.sleep(wait_time)
-            self.market = self.live.get_clock()
+            self.market = self.live_api.get_clock()
 
     async def _on_minute_bars(self, conn, channel, bar):
         if self.normalized_asset_data is not None:
-            if bar.symbol == self.symbol:
+            if self.market.is_open:
+                if bar.symbol == self.symbol:
 
-                if len(self.asset_data) != 0:
-                    # TODO test
-                    # Missing a bar or market is frozen
-                    if bar.start >\
-                            self.asset_data.iloc[-1].index\
-                            + timedelta(seconds=90):
-                        self._initialize_data()
+                    if len(self.asset_data) != 0:
+                        # TODO test
+                        # Missing a bar or market is frozen
+                        if bar.start >\
+                                self.asset_data.iloc[-1].index\
+                                + timedelta(seconds=90):
+                            self._initialize_data()
 
-                new_row = {
-                    'open': bar.open,
-                    'high': bar.high,
-                    'low': bar.low,
-                    'close': bar.close,
-                    'volume': bar.volume
-                }
-                self.asset_data.loc[bar.start] = new_row
-                self.normalized_asset_data = self._normalize_data()
+                    new_row = {
+                        'open': bar.open,
+                        'high': bar.high,
+                        'low': bar.low,
+                        'close': bar.close,
+                        'volume': bar.volume
+                    }
+                    self.asset_data.loc[bar.start] = new_row
+                    self.normalized_asset_data = self._normalize_data()
 
     async def _on_trade_updates(self, conn, channel, account):
         event = account.event
@@ -252,7 +275,6 @@ class AlpacaStockTradingEnv(gym.Env):
             tAMO.join()
 
         # TODO clean up with wait() or threading
-        # TODO test logic
         while len(self.normalized_asset_data) <= self.current_step:
             # Wait for new data to be appended
             continue
@@ -300,7 +322,7 @@ class AlpacaStockTradingEnv(gym.Env):
 
         try:
             if self.live:
-                self.live.submit_order(
+                self.live_api.submit_order(
                     symbol=self.symbol,
                     qty=abs(qty),
                     side=side,
@@ -308,7 +330,7 @@ class AlpacaStockTradingEnv(gym.Env):
                     time_in_force='day'
                 )
             else:
-                self.paper.submit_order(
+                self.paper_api.submit_order(
                     symbol=self.symbol,
                     qty=abs(qty),
                     side=side,
@@ -326,9 +348,9 @@ class AlpacaStockTradingEnv(gym.Env):
     def _close_position(self):
         if self.current_alpaca_position[0] != 0:
             if self.live:
-                self.live.close_position(self.symbol)
+                self.live_api.close_position(self.symbol)
             else:
-                self.paper.close_position(self.symbol)
+                self.paper_api.close_position(self.symbol)
 
             # TODO clean up with wait() or threading
             while self.current_alpaca_position[0] != 0:
@@ -507,7 +529,7 @@ class AlpacaStockTradingEnv(gym.Env):
         reward = (next_price - curr_price) * self.positions[-1][0]
         self.equity[-1] += reward
         self.rewards.append(reward)
-        self.alpaca_posistions.append(self.current_alpaca_position)
+        self.alpaca_positions.append(self.current_alpaca_position)
 
         info = {
             'Env Position': self.positions[-1],
