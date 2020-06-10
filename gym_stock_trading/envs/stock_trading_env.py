@@ -331,8 +331,8 @@ class StockTradingEnv(gym.Env):
     def _initialize_data(self):
         """Initializes environment market data"""
 
-        self.previous_close = next(self.previous_closes)
         self.asset_data = next(self.market_data)
+        self.previous_close = next(self.previous_closes)
         self.normalized_asset_data = self._normalize_data()
 
     def _next_observation(self):

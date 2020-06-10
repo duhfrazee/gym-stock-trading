@@ -100,7 +100,6 @@ class AlpacaStockTradingEnv(gym.Env):
 
         self.live = live
 
-        # TODO should i check if symbol is shortable?
         self.symbol = symbol
         self.market = None
 
@@ -542,7 +541,7 @@ class AlpacaStockTradingEnv(gym.Env):
         stop_time = self.eastern.localize(
             datetime.datetime.combine(
                 now,
-                datetime.time(3, 49, self.eastern)
+                datetime.time(15, 49, self.eastern)
             )
         )
 
