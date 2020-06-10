@@ -265,7 +265,7 @@ class StockTradingEnv(gym.Env):
     metadata = {'render.modes': ['human']}
     visualization = None
 
-    def __init__(self, market_data, previous_closes, daily_avg_volume=None,
+    def __init__(self, market_data, daily_avg_volume=None,
                  observation_size=1, volume_enabled=True,
                  allotted_amount=10000.0):
         super(StockTradingEnv, self).__init__()
@@ -281,7 +281,7 @@ class StockTradingEnv(gym.Env):
         self.asset_data = None
         self.normalized_asset_data = None
 
-        self.previous_closes = previous_closes
+        # self.previous_closes = previous_closes
         self.previous_close = None
 
         self.observation_size = observation_size
@@ -331,8 +331,7 @@ class StockTradingEnv(gym.Env):
     def _initialize_data(self):
         """Initializes environment market data"""
 
-        self.asset_data = next(self.market_data)
-        self.previous_close = next(self.previous_closes)
+        self.asset_data, self.previous_close  = next(self.market_data)
         self.normalized_asset_data = self._normalize_data()
 
     def _next_observation(self):
