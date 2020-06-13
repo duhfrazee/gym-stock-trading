@@ -68,26 +68,26 @@ class AlpacaStockTradingEnv(gym.Env):
     eastern = timezone('US/Eastern')
     channels = ['trade_updates', 'AM.*']
 
-    live_conn = tradeapi.StreamConn(
-        LIVE_APCA_API_KEY_ID,
-        LIVE_APCA_API_SECRET_KEY
-    )
-    paper_conn = tradeapi.StreamConn(
-        PAPER_APCA_API_KEY_ID,
-        PAPER_APCA_API_SECRET_KEY,
-        PAPER_APCA_API_BASE_URL
-    )
+    # live_conn = tradeapi.StreamConn(
+    #     LIVE_APCA_API_KEY_ID,
+    #     LIVE_APCA_API_SECRET_KEY
+    # )
+    # paper_conn = tradeapi.StreamConn(
+    #     PAPER_APCA_API_KEY_ID,
+    #     PAPER_APCA_API_SECRET_KEY,
+    #     PAPER_APCA_API_BASE_URL
+    # )
 
-    try:
-        # tLWS = threading.Thread(
-        #     target=live_conn.run, args=[channels])
-        # tLWS.start()
-        tPWS = threading.Thread(
-            target=paper_conn.run, args=[channels])
-        tPWS.start()
-    except RuntimeError as e:
-        # Already running
-        pass
+    # try:
+    #     # tLWS = threading.Thread(
+    #     #     target=live_conn.run, args=[channels])
+    #     # tLWS.start()
+    #     tPWS = threading.Thread(
+    #         target=paper_conn.run, args=[channels])
+    #     tPWS.start()
+    # except RuntimeError as e:
+    #     # Already running
+    #     pass
 
     # TODO in the future add data type here (min, 5min, etc)
     def __init__(self, symbol, previous_close, daily_avg_volume=None,
