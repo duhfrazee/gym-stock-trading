@@ -8,6 +8,6 @@ setup(
         'pandas',
         'matplotlib',
         'mplfinance',
-        'alpaca-trade-api'
+        # 'alpaca-trade-api'
     ]
 )
