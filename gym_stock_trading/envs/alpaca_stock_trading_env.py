@@ -19,17 +19,6 @@ from gym.utils import seeding
 # from gym_stock_trading.envs.helpers.stream import Stream
 from pytz import timezone
 
-try:
-    PAPER_APCA_API_KEY_ID = os.environ['PAPER_APCA_API_KEY_ID']
-    PAPER_APCA_API_SECRET_KEY = os.environ['PAPER_APCA_API_SECRET_KEY']
-    PAPER_APCA_API_BASE_URL = 'https://paper-api.alpaca.markets'
-    LIVE_APCA_API_KEY_ID = os.environ['LIVE_APCA_API_KEY_ID']
-    LIVE_APCA_API_SECRET_KEY = os.environ['LIVE_APCA_API_SECRET_KEY']
-except KeyError:
-    # TODO need to raise error here
-    pass
-
-
 class AlpacaStockTradingEnv(gym.Env):
     """
     Description:
@@ -84,6 +73,16 @@ class AlpacaStockTradingEnv(gym.Env):
                  allotted_amount=10000.0):
         super(AlpacaStockTradingEnv, self).__init__()
 
+        try:
+            PAPER_APCA_API_KEY_ID = os.environ['PAPER_APCA_API_KEY_ID']
+            PAPER_APCA_API_SECRET_KEY = os.environ['PAPER_APCA_API_SECRET_KEY']
+            PAPER_APCA_API_BASE_URL = 'https://paper-api.alpaca.markets'
+            LIVE_APCA_API_KEY_ID = os.environ['LIVE_APCA_API_KEY_ID']
+            LIVE_APCA_API_SECRET_KEY = os.environ['LIVE_APCA_API_SECRET_KEY']
+        except KeyError:
+            # TODO need to raise error here
+            pass
+
         paper_conn = tradeapi.StreamConn(
             PAPER_APCA_API_KEY_ID,
             PAPER_APCA_API_SECRET_KEY,
@@ -131,9 +130,9 @@ class AlpacaStockTradingEnv(gym.Env):
                 self.live_conn.on(r'trade_updates$')(self._on_trade_updates)
         else:
             self._on_minute_bars =\
-                self.paper_conn.on(r'AM$')(self._on_minute_bars)
+                paper_conn.on(r'AM$')(self._on_minute_bars)
             self._on_trade_updates =\
-                self.paper_conn.on(r'trade_updates$')(self._on_trade_updates)
+                paper_conn.on(r'trade_updates$')(self._on_trade_updates)
 
         self.volume_enabled = volume_enabled
         self.asset_data = None
