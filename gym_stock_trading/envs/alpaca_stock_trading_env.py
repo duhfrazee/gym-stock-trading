@@ -72,17 +72,23 @@ class AlpacaStockTradingEnv(gym.Env):
     #     LIVE_APCA_API_KEY_ID,
     #     LIVE_APCA_API_SECRET_KEY
     # )
-    paper_conn = tradeapi.StreamConn(
-        PAPER_APCA_API_KEY_ID,
-        PAPER_APCA_API_SECRET_KEY,
-        PAPER_APCA_API_BASE_URL
-    )
+    # paper_conn = tradeapi.StreamConn(
+    #     PAPER_APCA_API_KEY_ID,
+    #     PAPER_APCA_API_SECRET_KEY,
+    #     PAPER_APCA_API_BASE_URL
+    # )
 
     # TODO in the future add data type here (min, 5min, etc)
     def __init__(self, symbol, previous_close, daily_avg_volume=None,
                  live=False, observation_size=1, volume_enabled=True,
                  allotted_amount=10000.0):
         super(AlpacaStockTradingEnv, self).__init__()
+
+        paper_conn = tradeapi.StreamConn(
+            PAPER_APCA_API_KEY_ID,
+            PAPER_APCA_API_SECRET_KEY,
+            PAPER_APCA_API_BASE_URL
+        )
 
         try:
             # tLWS = threading.Thread(
