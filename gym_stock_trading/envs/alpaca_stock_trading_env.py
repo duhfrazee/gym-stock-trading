@@ -78,22 +78,22 @@ class AlpacaStockTradingEnv(gym.Env):
         PAPER_APCA_API_BASE_URL
     )
 
-    try:
-        # tLWS = threading.Thread(
-        #     target=live_conn.run, args=[channels])
-        # tLWS.start()
-        tPWS = threading.Thread(
-            target=paper_conn.run, args=[channels])
-        tPWS.start()
-    except RuntimeError as e:
-        # Already running
-        pass
-
     # TODO in the future add data type here (min, 5min, etc)
     def __init__(self, symbol, previous_close, daily_avg_volume=None,
                  live=False, observation_size=1, volume_enabled=True,
                  allotted_amount=10000.0):
         super(AlpacaStockTradingEnv, self).__init__()
+
+        try:
+            # tLWS = threading.Thread(
+            #     target=live_conn.run, args=[channels])
+            # tLWS.start()
+            tPWS = threading.Thread(
+                target=paper_conn.run, args=[channels])
+            tPWS.start()
+        except RuntimeError as e:
+            # Already running
+            pass
 
         self.current_step = 0
         self.current_episode = 0
@@ -218,13 +218,13 @@ class AlpacaStockTradingEnv(gym.Env):
             if self.market.is_open:
                 if bar.symbol == self.symbol:
 
-                    if len(self.asset_data) != 0:
-                        # TODO test
-                        # Missing a bar or market is frozen
-                        if bar.start >\
-                                self.asset_data.iloc[-1].index\
-                                + timedelta(seconds=90):
-                            self._initialize_data()
+                    # if len(self.asset_data) != 0:
+                    #     # TODO test
+                    #     # Missing a bar or market is frozen
+                    #     if bar.start >\
+                    #             self.asset_data.iloc[-1].index\
+                    #             + timedelta(seconds=90):
+                    #         self._initialize_data()
 
                     new_row = {
                         'open': bar.open,
