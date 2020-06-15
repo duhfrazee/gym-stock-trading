@@ -95,7 +95,7 @@ class AlpacaStockTradingEnv(gym.Env):
             #     target=live_conn.run, args=[channels])
             # tLWS.start()
             tPWS = threading.Thread(
-                target=paper_conn.run, args=[channels])
+                target=paper_conn.run, args=[self.channels])
             tPWS.start()
         except RuntimeError as e:
             # Already running
