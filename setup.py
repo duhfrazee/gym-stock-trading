@@ -7,6 +7,7 @@ setup(
         'gym',
         'pandas',
         'matplotlib',
-        'mplfinance'  # 'alpaca-trade-api'
+        'mplfinance',
+        'alpaca-trade-api'
     ]
 )
