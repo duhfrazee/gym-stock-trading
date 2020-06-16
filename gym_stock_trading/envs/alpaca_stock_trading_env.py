@@ -19,6 +19,7 @@ from gym.utils import seeding
 # from gym_stock_trading.envs.helpers.stream import Stream
 from pytz import timezone
 
+
 class AlpacaStockTradingEnv(gym.Env):
     """
     Description:
@@ -83,7 +84,7 @@ class AlpacaStockTradingEnv(gym.Env):
             # TODO need to raise error here
             pass
 
-        paper_conn = tradeapi.StreamConn(
+        self.paper_conn = tradeapi.StreamConn(
             PAPER_APCA_API_KEY_ID,
             PAPER_APCA_API_SECRET_KEY,
             PAPER_APCA_API_BASE_URL
@@ -130,9 +131,9 @@ class AlpacaStockTradingEnv(gym.Env):
                 self.live_conn.on(r'trade_updates$')(self._on_trade_updates)
         else:
             self._on_minute_bars =\
-                paper_conn.on(r'AM$')(self._on_minute_bars)
+                self.paper_conn.on(r'AM$')(self._on_minute_bars)
             self._on_trade_updates =\
-                paper_conn.on(r'trade_updates$')(self._on_trade_updates)
+                self.paper_conn.on(r'trade_updates$')(self._on_trade_updates)
 
         self.volume_enabled = volume_enabled
         self.asset_data = None
