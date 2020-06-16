@@ -99,7 +99,7 @@ class AlpacaStockTradingEnv(gym.Env):
             tPWS.start()
         except RuntimeError as e:
             # Already running
-            pass
+            print(e)
 
         self.current_step = 0
         self.current_episode = 0
