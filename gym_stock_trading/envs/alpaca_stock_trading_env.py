@@ -19,6 +19,16 @@ from gym.utils import seeding
 # from gym_stock_trading.envs.helpers.stream import Stream
 from pytz import timezone
 
+try:
+    PAPER_APCA_API_KEY_ID = os.environ['PAPER_APCA_API_KEY_ID']
+    PAPER_APCA_API_SECRET_KEY = os.environ['PAPER_APCA_API_SECRET_KEY']
+    PAPER_APCA_API_BASE_URL = 'https://paper-api.alpaca.markets'
+    LIVE_APCA_API_KEY_ID = os.environ['LIVE_APCA_API_KEY_ID']
+    LIVE_APCA_API_SECRET_KEY = os.environ['LIVE_APCA_API_SECRET_KEY']
+except KeyError:
+    # TODO need to raise error here
+    print("KeyError for Alpaca credentials")
+    pass
 
 class AlpacaStockTradingEnv(gym.Env):
     """
@@ -58,48 +68,32 @@ class AlpacaStockTradingEnv(gym.Env):
     eastern = timezone('US/Eastern')
     channels = ['trade_updates', 'AM.*']
 
-    # live_conn = tradeapi.StreamConn(
-    #     LIVE_APCA_API_KEY_ID,
-    #     LIVE_APCA_API_SECRET_KEY
-    # )
-    # paper_conn = tradeapi.StreamConn(
-    #     PAPER_APCA_API_KEY_ID,
-    #     PAPER_APCA_API_SECRET_KEY,
-    #     PAPER_APCA_API_BASE_URL
-    # )
+    live_conn = tradeapi.StreamConn(
+        LIVE_APCA_API_KEY_ID,
+        LIVE_APCA_API_SECRET_KEY
+    )
+    paper_conn = tradeapi.StreamConn(
+        PAPER_APCA_API_KEY_ID,
+        PAPER_APCA_API_SECRET_KEY,
+        PAPER_APCA_API_BASE_URL
+    )
+
+    try:
+        # tLWS = threading.Thread(
+        #     target=live_conn.run, args=[channels])
+        # tLWS.start()
+        tPWS = threading.Thread(
+            target=paper_conn.run, args=[channels])
+        tPWS.start()
+    except RuntimeError as e:
+        # Already running
+        print(e)
 
     # TODO in the future add data type here (min, 5min, etc)
     def __init__(self, symbol, previous_close, daily_avg_volume=None,
                  live=False, observation_size=1, volume_enabled=True,
                  allotted_amount=10000.0):
         super(AlpacaStockTradingEnv, self).__init__()
-
-        try:
-            PAPER_APCA_API_KEY_ID = os.environ['PAPER_APCA_API_KEY_ID']
-            PAPER_APCA_API_SECRET_KEY = os.environ['PAPER_APCA_API_SECRET_KEY']
-            PAPER_APCA_API_BASE_URL = 'https://paper-api.alpaca.markets'
-            LIVE_APCA_API_KEY_ID = os.environ['LIVE_APCA_API_KEY_ID']
-            LIVE_APCA_API_SECRET_KEY = os.environ['LIVE_APCA_API_SECRET_KEY']
-        except KeyError:
-            # TODO need to raise error here
-            pass
-
-        self.paper_conn = tradeapi.StreamConn(
-            PAPER_APCA_API_KEY_ID,
-            PAPER_APCA_API_SECRET_KEY,
-            PAPER_APCA_API_BASE_URL
-        )
-
-        try:
-            # tLWS = threading.Thread(
-            #     target=live_conn.run, args=[channels])
-            # tLWS.start()
-            tPWS = threading.Thread(
-                target=self.paper_conn.run, args=[self.channels])
-            tPWS.start()
-        except RuntimeError as e:
-            # Already running
-            print(e)
 
         self.current_step = 0
         self.current_episode = 0
@@ -245,6 +239,7 @@ class AlpacaStockTradingEnv(gym.Env):
     async def _on_trade_updates(self, conn, channel, account):
         event = account.event
         order = account.order
+        print(order)
         if order['symbol'] == self.symbol:
             if event == 'fill' or event == 'partial_fill':
                 if order['side'] == 'buy':
@@ -543,9 +538,7 @@ class AlpacaStockTradingEnv(gym.Env):
                 "reward": reward,
                 "mode": 'live' if self.live else 'paper'
             },
-            "trades": {
-                
-            },
+            "trades": {},
             "positions": {
                 "env_position": self.positions[-1],
                 "actual_position": self.current_alpaca_position
