@@ -537,8 +537,19 @@ class AlpacaStockTradingEnv(gym.Env):
         self.alpaca_positions.append(self.current_alpaca_position)
 
         info = {
-            'Env Position': self.positions[-1],
-            'Actual Position': self.current_alpaca_position
+            "profit_loss": {
+                "date_time": self.asset_data.index[-2],
+                "profit_loss": self.profit_loss[-1],
+                "reward": reward,
+                "mode": 'live' if self.live else 'paper'
+            },
+            "trades": {
+                
+            },
+            "positions": {
+                "env_position": self.positions[-1],
+                "actual_position": self.current_alpaca_position
+            }
         }
 
         # Close 11 minutes before end of day

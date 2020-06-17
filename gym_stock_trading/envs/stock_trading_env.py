@@ -511,6 +511,15 @@ class StockTradingEnv(gym.Env):
         self.equity[-1] += reward
         self.rewards.append(reward)
 
+        info = {
+            "profit_loss": {
+                "date_time": self.asset_data.index[0].date(),
+                "profit_loss": sum(self.profit_loss),
+                "reward": sum(reward),
+                "mode": 'backtest'
+            }
+        }
+
         # Episode ends when down 5% or DataFrame ends
         if self.current_step + 1 == len(self.asset_data):
             done = True
