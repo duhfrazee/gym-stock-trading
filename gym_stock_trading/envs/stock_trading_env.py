@@ -527,7 +527,7 @@ class StockTradingEnv(gym.Env):
             done = True if self.equity[-1] / self.base_value <= -0.05\
                         else False
 
-        return obs, reward, done, {}
+        return obs, reward, done, info
 
     def reset(self):
         """Reset the state of the environment to an initial state"""
