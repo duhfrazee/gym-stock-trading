@@ -515,7 +515,7 @@ class StockTradingEnv(gym.Env):
             "profit_loss": {
                 "date_time": self.asset_data.index[0].date(),
                 "profit_loss": sum(self.profit_loss),
-                "reward": sum(reward),
+                "reward": sum(self.rewards),
                 "mode": 'backtest'
             }
         }
