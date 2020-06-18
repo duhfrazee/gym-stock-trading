@@ -3,6 +3,7 @@ This module is a stock trading environment for OpenAI gym
 utilizing Alpaca for live and paper trading.
 """
 import datetime
+import logging
 import os
 import random
 import threading
@@ -19,6 +20,7 @@ from gym.utils import seeding
 # from gym_stock_trading.envs.helpers.stream import Stream
 from pytz import timezone
 
+logger = logging.getLogger(__name__)
 try:
     PAPER_APCA_API_KEY_ID = os.environ['PAPER_APCA_API_KEY_ID']
     PAPER_APCA_API_SECRET_KEY = os.environ['PAPER_APCA_API_SECRET_KEY']
@@ -26,9 +28,7 @@ try:
     LIVE_APCA_API_KEY_ID = os.environ['LIVE_APCA_API_KEY_ID']
     LIVE_APCA_API_SECRET_KEY = os.environ['LIVE_APCA_API_SECRET_KEY']
 except KeyError:
-    # TODO need to raise error here
-    print("KeyError for Alpaca credentials")
-    pass
+    logger.error("KeyError for Alpaca credentials.")
 
 class AlpacaStockTradingEnv(gym.Env):
     """
@@ -87,7 +87,7 @@ class AlpacaStockTradingEnv(gym.Env):
         tPWS.start()
     except RuntimeError as e:
         # Already running
-        print(e)
+        logger.error(e)
 
     # TODO in the future add data type here (min, 5min, etc)
     def __init__(self, symbol, previous_close, daily_avg_volume=None,
@@ -157,6 +157,18 @@ class AlpacaStockTradingEnv(gym.Env):
         self.observation_space = spaces.Box(
             low=0, high=1, shape=(5, observation_size), dtype=np.float16)
 
+        logger.info('Initialized AlpacaStockTradingEnv with the following information: ')
+        logger.info('Live: {live}', live=self.live)
+        logger.info('Symbol: {symbol}', symbol=self.symbol)
+        logger.info('volume_enabled: {volume_enabled}', volume_enabled=self.volume_enabled)
+        if self.volume_enabled:
+            logger.info('daily_avg_volume: {daily_avg_volume}', daily_avg_volume=self.daily_avg_volume)
+        logger.info('observation_size: {observation_size}', observation_size=self.observation_size)
+        logger.info('base_value: {base_value}', base_value=self.base_value)
+        logger.info('equity: {equity}', equity=self.equity)
+        logger.info('cash: {cash}', cash=self.cash)
+        logger.info('profit_loss: {profit_loss}', profit_loss=self.profit_loss)
+
     def _normalize_data(self):
 
         normalized_dataframe = self.asset_data.copy()
@@ -176,6 +188,8 @@ class AlpacaStockTradingEnv(gym.Env):
         normalized_dataframe['volume'] =\
             normalized_dataframe['volume'] / self.daily_avg_volume
 
+        logger.info('_normalize_data output: ')
+        logger.info('normalized_dataframe: {normalized_dataframe}', normalized_dataframe=self.normalized_dataframe)
         return normalized_dataframe
 
     def _initialize_data(self):
@@ -202,6 +216,10 @@ class AlpacaStockTradingEnv(gym.Env):
 
         self.normalized_asset_data = self._normalize_data()
 
+        logger.info('_initialize_data output: ')
+        logger.info('asset_data: {asset_data}', asset_data=self.asset_data)
+        logger.info('current_step: {current_step}', current_step=self.current_step)
+
     def _await_market_open(self):
         while not self.market.is_open:
             curr_time = datetime.datetime.now(self.eastern)
@@ -214,6 +232,9 @@ class AlpacaStockTradingEnv(gym.Env):
             self.market = self.live_api.get_clock()
 
     async def _on_minute_bars(self, conn, channel, bar):
+        logger.info('async _on_minute_bars called for {symbol}', symbol=bar.symbol)
+        logger.info('bar.start: {start}', start=bar.start)
+        logger.info('bar.start type: {starttype}', starttype=type(bar.start))
         if self.normalized_asset_data is not None:
             if self.market.is_open:
                 if bar.symbol == self.symbol:
@@ -234,12 +255,13 @@ class AlpacaStockTradingEnv(gym.Env):
                         'volume': bar.volume
                     }
                     self.asset_data.loc[bar.start] = new_row
+                    logger.info('asset_data new row: {row}', row=self.asset_data.loc[bar.start])
                     self.normalized_asset_data = self._normalize_data()
 
     async def _on_trade_updates(self, conn, channel, account):
         event = account.event
         order = account.order
-        print(order)
+        logger.info('async _on_trade_updates called for {order}', order=order)
         if order['symbol'] == self.symbol:
             if event == 'fill' or event == 'partial_fill':
                 if order['side'] == 'buy':
