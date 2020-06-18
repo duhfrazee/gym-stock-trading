@@ -580,7 +580,7 @@ class AlpacaStockTradingEnv(gym.Env):
         stop_time = self.eastern.localize(
             datetime.datetime.combine(
                 now,
-                datetime.time(15, 49, tzinfo=self.eastern)
+                datetime.time(15, 49)
             )
         )
 
