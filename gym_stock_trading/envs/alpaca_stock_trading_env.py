@@ -293,14 +293,18 @@ class AlpacaStockTradingEnv(gym.Env):
         """Get the stock data for the current observation size."""
 
         if not self.market.is_open:
+            logger.info('Market is closed.')
             tAMO = threading.Thread(target=self._await_market_open)
             tAMO.start()
             tAMO.join()
 
+        logger.info('Market is open.')
         # TODO clean up with wait() or threading
         while len(self.normalized_asset_data) <= self.current_step:
             # Wait for new data to be appended
             continue
+
+        logger.info('Length of normalized_asset_data increased')
 
         offset = self.current_step+1 - self.observation_size
 
@@ -334,6 +338,7 @@ class AlpacaStockTradingEnv(gym.Env):
             observation = np.concatenate(
                 (observation, observation_zeros), axis=1)
 
+        logger.info('New observation: %s', observation)
         return observation
 
     def _submit_order(self, qty, order_type='market'):
