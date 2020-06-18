@@ -189,7 +189,7 @@ class AlpacaStockTradingEnv(gym.Env):
             normalized_dataframe['volume'] / self.daily_avg_volume
 
         logger.info('_normalize_data output: ')
-        logger.info('normalized_dataframe: %s', self.normalized_dataframe)
+        logger.info('normalized_dataframe: %s', normalized_dataframe)
         return normalized_dataframe
 
     def _initialize_data(self):
