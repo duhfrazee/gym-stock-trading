@@ -82,6 +82,7 @@ class AlpacaStockTradingEnv(gym.Env):
         # tLWS = threading.Thread(
         #     target=live_conn.run, args=[channels])
         # tLWS.start()
+        logger.info('Connecting to channels: %s', channels)
         tPWS = threading.Thread(
             target=paper_conn.run, args=[channels])
         tPWS.start()
@@ -120,12 +121,12 @@ class AlpacaStockTradingEnv(gym.Env):
 
         if self.live:
             self._on_minute_bars =\
-                self.live_conn.on(r'AM$')(self._on_minute_bars)
+                self.live_conn.on(r'^AM$')(self._on_minute_bars)
             self._on_trade_updates =\
                 self.live_conn.on(r'trade_updates$')(self._on_trade_updates)
         else:
             self._on_minute_bars =\
-                self.paper_conn.on(r'AM$')(self._on_minute_bars)
+                self.paper_conn.on(r'^AM$')(self._on_minute_bars)
             self._on_trade_updates =\
                 self.paper_conn.on(r'trade_updates$')(self._on_trade_updates)
 
