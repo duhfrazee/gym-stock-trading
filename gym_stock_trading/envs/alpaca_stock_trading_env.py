@@ -575,14 +575,14 @@ class AlpacaStockTradingEnv(gym.Env):
         }
 
         # Close 11 minutes before end of day
-        now = datetime.datetime.now(self.eastern)
+        # now = datetime.datetime.now(self.eastern)
 
-        stop_time = self.eastern.localize(
-            datetime.datetime.combine(
-                now,
-                datetime.time(15, 49, self.eastern)
-            )
-        )
+        # stop_time = self.eastern.localize(
+        #     datetime.datetime.combine(
+        #         now,
+        #         datetime.time(15, 49, tzinfo=self.eastern)
+        #     )
+        # )
 
         if now > stop_time:
             tOrder = threading.Thread(
