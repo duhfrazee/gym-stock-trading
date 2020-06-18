@@ -66,7 +66,7 @@ class AlpacaStockTradingEnv(gym.Env):
 
     metadata = {'render.modes': ['human']}
     eastern = timezone('US/Eastern')
-    channels = ['trade_updates', 'AM.*']
+    channels = ['AM.*', 'trade_updates']
 
     live_conn = tradeapi.StreamConn(
         LIVE_APCA_API_KEY_ID,
@@ -125,10 +125,13 @@ class AlpacaStockTradingEnv(gym.Env):
             self._on_trade_updates =\
                 self.live_conn.on(r'trade_updates$')(self._on_trade_updates)
         else:
-            self._on_minute_bars =\
-                self.paper_conn.on(r'^AM$')(self._on_minute_bars)
-            self._on_trade_updates =\
-                self.paper_conn.on(r'trade_updates$')(self._on_trade_updates)
+            try:
+                self._on_minute_bars =\
+                    self.paper_conn.on(r'^AM$')(self._on_minute_bars)
+                self._on_trade_updates =\
+                    self.paper_conn.on(r'trade_updates$')(self._on_trade_updates)
+            except Exception as e:
+                logger.error(e)
 
         self.volume_enabled = volume_enabled
         self.asset_data = None
