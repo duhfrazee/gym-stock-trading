@@ -158,8 +158,8 @@ class AlpacaStockTradingEnv(gym.Env):
             low=0, high=1, shape=(5, observation_size), dtype=np.float16)
 
         logger.info('Initialized AlpacaStockTradingEnv with the following information: ')
-        logger.info('Live: {live}', live=self.live)
-        logger.info('Symbol: {symbol}', symbol=self.symbol)
+        logger.info('Live: %s', self.live)
+        logger.info('Symbol: %s', self.symbol)
         logger.info('volume_enabled: {volume_enabled}', volume_enabled=self.volume_enabled)
         if self.volume_enabled:
             logger.info('daily_avg_volume: {daily_avg_volume}', daily_avg_volume=self.daily_avg_volume)
