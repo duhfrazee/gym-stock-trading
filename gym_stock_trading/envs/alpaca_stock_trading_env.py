@@ -237,9 +237,6 @@ class AlpacaStockTradingEnv(gym.Env):
             self.market = self.live_api.get_clock()
 
     async def _on_minute_bars(self, conn, channel, bar):
-        logger.info('async _on_minute_bars called for %s', bar.symbol)
-        logger.info('bar.start: %s', bar.start)
-        logger.info('bar.start type: %s', type(bar.start))
         if self.normalized_asset_data is not None:
             if self.market.is_open:
                 if bar.symbol == self.symbol:
