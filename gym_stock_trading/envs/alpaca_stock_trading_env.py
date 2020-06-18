@@ -160,14 +160,14 @@ class AlpacaStockTradingEnv(gym.Env):
         logger.info('Initialized AlpacaStockTradingEnv with the following information: ')
         logger.info('Live: %s', self.live)
         logger.info('Symbol: %s', self.symbol)
-        logger.info('volume_enabled: {volume_enabled}', volume_enabled=self.volume_enabled)
+        logger.info('volume_enabled: %s', self.volume_enabled)
         if self.volume_enabled:
-            logger.info('daily_avg_volume: {daily_avg_volume}', daily_avg_volume=self.daily_avg_volume)
-        logger.info('observation_size: {observation_size}', observation_size=self.observation_size)
-        logger.info('base_value: {base_value}', base_value=self.base_value)
-        logger.info('equity: {equity}', equity=self.equity)
-        logger.info('cash: {cash}', cash=self.cash)
-        logger.info('profit_loss: {profit_loss}', profit_loss=self.profit_loss)
+            logger.info('daily_avg_volume: %s', self.daily_avg_volume)
+        logger.info('observation_size: %s', self.observation_size)
+        logger.info('base_value: %s', self.base_value)
+        logger.info('equity: %s', self.equity)
+        logger.info('cash: %s', self.cash)
+        logger.info('profit_loss: %s', self.profit_loss)
 
     def _normalize_data(self):
 
@@ -189,7 +189,7 @@ class AlpacaStockTradingEnv(gym.Env):
             normalized_dataframe['volume'] / self.daily_avg_volume
 
         logger.info('_normalize_data output: ')
-        logger.info('normalized_dataframe: {normalized_dataframe}', normalized_dataframe=self.normalized_dataframe)
+        logger.info('normalized_dataframe: %s', self.normalized_dataframe)
         return normalized_dataframe
 
     def _initialize_data(self):
@@ -217,8 +217,8 @@ class AlpacaStockTradingEnv(gym.Env):
         self.normalized_asset_data = self._normalize_data()
 
         logger.info('_initialize_data output: ')
-        logger.info('asset_data: {asset_data}', asset_data=self.asset_data)
-        logger.info('current_step: {current_step}', current_step=self.current_step)
+        logger.info('asset_data: %s', self.asset_data)
+        logger.info('current_step: %s', self.current_step)
 
     def _await_market_open(self):
         while not self.market.is_open:
@@ -232,9 +232,9 @@ class AlpacaStockTradingEnv(gym.Env):
             self.market = self.live_api.get_clock()
 
     async def _on_minute_bars(self, conn, channel, bar):
-        logger.info('async _on_minute_bars called for {symbol}', symbol=bar.symbol)
-        logger.info('bar.start: {start}', start=bar.start)
-        logger.info('bar.start type: {starttype}', starttype=type(bar.start))
+        logger.info('async _on_minute_bars called for %s', bar.symbol)
+        logger.info('bar.start: %s', bar.start)
+        logger.info('bar.start type: %s', type(bar.start))
         if self.normalized_asset_data is not None:
             if self.market.is_open:
                 if bar.symbol == self.symbol:
@@ -255,13 +255,13 @@ class AlpacaStockTradingEnv(gym.Env):
                         'volume': bar.volume
                     }
                     self.asset_data.loc[bar.start] = new_row
-                    logger.info('asset_data new row: {row}', row=self.asset_data.loc[bar.start])
+                    logger.info('asset_data new row: %s', self.asset_data.loc[bar.start])
                     self.normalized_asset_data = self._normalize_data()
 
     async def _on_trade_updates(self, conn, channel, account):
         event = account.event
         order = account.order
-        logger.info('async _on_trade_updates called for {order}', order=order)
+        logger.info('async _on_trade_updates called for %s', order)
         if order['symbol'] == self.symbol:
             if event == 'fill' or event == 'partial_fill':
                 if order['side'] == 'buy':
