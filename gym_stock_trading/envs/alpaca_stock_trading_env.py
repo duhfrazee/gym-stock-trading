@@ -125,13 +125,10 @@ class AlpacaStockTradingEnv(gym.Env):
             self._on_trade_updates =\
                 self.live_conn.on(r'trade_updates$')(self._on_trade_updates)
         else:
-            try:
-                self._on_minute_bars =\
-                    self.paper_conn.on(r'^AM$')(self._on_minute_bars)
-                self._on_trade_updates =\
-                    self.paper_conn.on(r'trade_updates$')(self._on_trade_updates)
-            except Exception as e:
-                logger.error(e)
+            self._on_minute_bars =\
+                self.paper_conn.on(r'^AM$')(self._on_minute_bars)
+            self._on_trade_updates =\
+                self.paper_conn.on(r'trade_updates$')(self._on_trade_updates)
 
         self.volume_enabled = volume_enabled
         self.asset_data = None
@@ -193,8 +190,6 @@ class AlpacaStockTradingEnv(gym.Env):
         normalized_dataframe['volume'] =\
             normalized_dataframe['volume'] / self.daily_avg_volume
 
-        logger.info('_normalize_data output: ')
-        logger.info('normalized_dataframe: %s', normalized_dataframe)
         return normalized_dataframe
 
     def _initialize_data(self):
@@ -220,10 +215,6 @@ class AlpacaStockTradingEnv(gym.Env):
         self.current_step = len(self.asset_data)
 
         self.normalized_asset_data = self._normalize_data()
-
-        logger.info('_initialize_data output: ')
-        logger.info('asset_data: %s', self.asset_data)
-        logger.info('current_step: %s', self.current_step)
 
     def _await_market_open(self):
         while not self.market.is_open:
@@ -257,13 +248,12 @@ class AlpacaStockTradingEnv(gym.Env):
                         'volume': bar.volume
                     }
                     self.asset_data.loc[bar.start] = new_row
-                    logger.info('asset_data new row: %s', self.asset_data.loc[bar.start])
                     self.normalized_asset_data = self._normalize_data()
 
     async def _on_trade_updates(self, conn, channel, account):
         event = account.event
         order = account.order
-        logger.info('async _on_trade_updates called for %s', order)
+        # logger.info('async _on_trade_updates called for %s', order)
         if order['symbol'] == self.symbol:
             if event == 'fill' or event == 'partial_fill':
                 if order['side'] == 'buy':
@@ -294,18 +284,14 @@ class AlpacaStockTradingEnv(gym.Env):
         """Get the stock data for the current observation size."""
 
         if not self.market.is_open:
-            logger.info('Market is closed.')
             tAMO = threading.Thread(target=self._await_market_open)
             tAMO.start()
             tAMO.join()
 
-        logger.info('Market is open.')
         # TODO clean up with wait() or threading
         while len(self.normalized_asset_data) <= self.current_step:
             # Wait for new data to be appended
             continue
-
-        logger.info('Length of normalized_asset_data increased')
 
         offset = self.current_step+1 - self.observation_size
 
@@ -339,7 +325,6 @@ class AlpacaStockTradingEnv(gym.Env):
             observation = np.concatenate(
                 (observation, observation_zeros), axis=1)
 
-        logger.info('New observation: %s', observation)
         return observation
 
     def _submit_order(self, qty, order_type='market'):
@@ -577,6 +562,7 @@ class AlpacaStockTradingEnv(gym.Env):
         # Close 11 minutes before end of day
         now = datetime.datetime.now(self.eastern)
 
+        # TODO likely eastern needs to be on the time not the "combine" function
         stop_time = self.eastern.localize(
             datetime.datetime.combine(
                 now,
