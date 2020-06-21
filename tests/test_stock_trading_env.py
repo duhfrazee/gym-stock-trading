@@ -1,9 +1,9 @@
-import unittest
 import os
 
 import gym
 import numpy as np
 import pandas as pd
+import pytest
 
 # test submit order for qty pos, neg, and 0
 # test close position
@@ -16,7 +16,11 @@ import pandas as pd
 # test generators!!
 
 
-class TestStockTradingEnv(unittest.TestCase):
+class TestStockTradingEnv:
+    def test_passing(self):
+        x = "this"
+        assert "h" in x
+
     # def setUp(self):
     #     self.previous_close = 291.81
     #     self.daily_avg_volume = 31140787
@@ -85,9 +89,6 @@ class TestStockTradingEnv(unittest.TestCase):
     #         [laststep_close / (2*self.previous_close)],
     #         [laststep_volume / self.daily_avg_volume]
     #     ])
-
-    def passing_test(self):
-        assert 1 == 1
 
     # def test_inititalize_env(self):
 
@@ -728,8 +729,8 @@ class TestStockTradingEnv(unittest.TestCase):
     #     return abs(shares) * (avg_price - (curr_price - avg_price))
 
     # def _reset_env(self):
-        return self.env.reset()
+        # return self.env.reset()
 
 
-if __name__ == '__main__':
-    unittest.main()
+# if __name__ == '__main__':
+#     unittest.main()
