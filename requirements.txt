@@ -1,0 +1,5 @@
+alpaca-trade-api==0.46
+gym==0.17.1
+matplotlib==3.2.1
+mplfinance==0.12.4a0
+pandas==1.0.3
