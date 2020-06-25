@@ -445,6 +445,7 @@ class StockTradingEnv(gym.Env):
                 new_position = (total_qty, avg_price)
                 self.positions.append(new_position)
                 self.cash.append(self.cash[-1] - purchase_amount)
+                self.profit_loss.append(0.0)
 
                 if total_qty > 0:
                     # Long position
@@ -517,11 +518,11 @@ class StockTradingEnv(gym.Env):
                 "profit_loss": sum(self.profit_loss),
                 "reward": sum(self.rewards),
                 "mode": 'backtest'
-            }
+            },
         }
 
         # Episode ends when down 5% or DataFrame ends
-        if self.current_step + 1 == len(self.asset_data):
+        if self.current_step + 2 == len(self.asset_data):
             done = True
         else:
             done = True if self.equity[-1] / self.base_value <= -0.05\
@@ -557,4 +558,8 @@ class StockTradingEnv(gym.Env):
             window_size=LOOKBACK_WINDOW_SIZE)
 
     def close(self):
+        # action = np.array([0.0])
+
+        # # close positions
+        # self._take_action(action)
         pass
