@@ -220,7 +220,7 @@ class AlpacaStockTradingEnv(gym.Env):
         while not self.market.is_open:
             curr_time = datetime.datetime.now(self.eastern)
             next_open = self.market.next_open.astimezone(self.eastern)
-            wait_time = (next_open-curr_time).seconds
+            wait_time = (next_open-curr_time).seconds + 1
 
             print('Waiting ' + str(wait_time) + ' seconds for market to open.')
 
