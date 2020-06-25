@@ -468,6 +468,7 @@ class AlpacaStockTradingEnv(gym.Env):
                 new_position = (total_qty, avg_price)
                 self.positions.append(new_position)
                 self.cash.append(self.cash[-1] - purchase_amount)
+                self.profit_loss.append(0.0)
 
                 if total_qty > 0:
                     # Long position
