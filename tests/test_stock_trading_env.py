@@ -744,5 +744,5 @@ class TestStockTradingEnv(unittest.TestCase):
         return self.env.reset()
 
 
-# if __name__ == '__main__':
-#     unittest.main()
+if __name__ == '__main__':
+    unittest.main()
