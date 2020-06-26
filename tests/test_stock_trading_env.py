@@ -413,6 +413,7 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertListEqual(
             self.env.profit_loss, [0.0, 0.0, correct_profit_loss, 0.0]
         )
+        self.assertListEqual(self.env.trades, [1, 1, 0])
 
     def test_reduce_short_position(self):
         _ = self._reset_env()
@@ -456,6 +457,7 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertListEqual(
             self.env.profit_loss, [0.0, 0.0, correct_profit_loss, 0.0]
         )
+        self.assertListEqual(self.env.trades, [1, 1, 0])
 
     def test_close_long_position(self):
         _ = self._reset_env()
