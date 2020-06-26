@@ -184,6 +184,7 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertAlmostEqual(reward, correct_reward)
         self.assertEqual(done, False)
         self.assertEqual(self.env.profit_loss, [0.0, 0.0])
+        self.assertListEqual(self.env.trades, [1])
 
         correct_position = (17, 289.2786)
         self.assertEqual(self.env.positions, [(0, 0.0), correct_position])
@@ -203,6 +204,7 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertAlmostEqual(reward, correct_reward)
         self.assertEqual(done, False)
         self.assertEqual(self.env.profit_loss, [0.0, 0.0])
+        self.assertListEqual(self.env.trades, [1])
 
         correct_position = (-17, 289.2786)
         self.assertEqual(self.env.positions, [(0, 0.0), correct_position])
@@ -224,6 +226,7 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertAlmostEqual(reward, correct_reward)
         self.assertEqual(done, False)
         self.assertEqual(self.env.profit_loss, [0.0, 0.0])
+        self.assertListEqual(self.env.trades, [1])
 
         correct_position = (22, 289.2786)
         self.assertEqual(self.env.positions[-1], correct_position)
@@ -245,6 +248,7 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertAlmostEqual(reward, correct_reward)
         self.assertEqual(done, False)
         self.assertEqual(self.env.profit_loss[-1], 0.0)
+        self.assertListEqual(self.env.trades, [1])
 
         correct_position = (-22, 289.2786)
         self.assertEqual(self.env.positions[-1], correct_position)
@@ -266,6 +270,7 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertAlmostEqual(reward, correct_reward)
         self.assertEqual(done, False)
         self.assertEqual(self.env.profit_loss, [0.0, 0.0])
+        self.assertListEqual(self.env.trades, [1])
 
         correct_position = (34, 289.2786)
         self.assertEqual(self.env.positions[-1], correct_position)
@@ -287,6 +292,7 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertAlmostEqual(reward, correct_reward)
         self.assertEqual(done, False)
         self.assertEqual(self.env.profit_loss[-1], 0.0)
+        self.assertListEqual(self.env.trades, [1])
 
         correct_position = (-34, 289.2786)
         self.assertEqual(self.env.positions[-1], correct_position)
@@ -319,6 +325,7 @@ class TestStockTradingEnv(unittest.TestCase):
             self.env.profit_loss,
             [0.0, 0.0, 0.0]
         )
+        self.assertListEqual(self.env.trades, [1, 1])
 
         correct_position = (23, avg_cost)
         self.assertEqual(self.env.positions[-1][0], correct_position[0])
@@ -354,6 +361,7 @@ class TestStockTradingEnv(unittest.TestCase):
             self.env.profit_loss,
             [0.0, 0.0, 0.0]
         )
+        self.assertListEqual(self.env.trades, [1, 1])
 
         cash = 10000 - (17 * step0_close) - (6 * step1_close)
         curr_stock_value = self._calculate_short_equity_value(
@@ -386,6 +394,7 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertEqual(done, False)
         self.assertListEqual(
             self.env.profit_loss, [0.0, 0.0, correct_profit_loss])
+        self.assertListEqual(self.env.trades, [1, 1])
 
         cash = 10000.0 - 4917.7362 + 3468.48
         curr_stock_value = 5 * step2_close
@@ -427,6 +436,7 @@ class TestStockTradingEnv(unittest.TestCase):
             self.env.profit_loss,
             [0.0, 0.0, correct_profit_loss]
         )
+        self.assertListEqual(self.env.trades, [1, 1])
 
         cash = 10000.0 - 4917.7362\
             + self._calculate_short_equity_value(12, step0_close, step1_close)
@@ -469,6 +479,7 @@ class TestStockTradingEnv(unittest.TestCase):
             self.env.profit_loss,
             [0.0, 0.0, correct_profit_loss]
         )
+        self.assertListEqual(self.env.trades, [1, 1])
 
         cash = 10000.0 + self.env.profit_loss[-1]
         curr_stock_value = 0
@@ -506,6 +517,7 @@ class TestStockTradingEnv(unittest.TestCase):
             self.env.profit_loss,
             [0.0, 0.0, correct_profit_loss]
         )
+        self.assertListEqual(self.env.trades, [1, 1])
 
         cash = 10000.0 + self.env.profit_loss[-1]
         curr_stock_value = 0
@@ -547,6 +559,7 @@ class TestStockTradingEnv(unittest.TestCase):
             self.env.profit_loss,
             [0.0, 0.0, correct_profit_loss]
         )
+        self.assertListEqual(self.env.trades, [1, 2])
 
         purchase_amount = 29 * step1_close
         cash = 10000 + self.env.profit_loss[-1] - purchase_amount
@@ -583,6 +596,7 @@ class TestStockTradingEnv(unittest.TestCase):
             self.env.profit_loss,
             [0.0, 0.0, correct_profit_loss]
         )
+        self.assertListEqual(self.env.trades, [1, 2])
 
         purchase_amount = 29 * step1_close
         cash = 10000 + correct_profit_loss - purchase_amount
@@ -620,6 +634,7 @@ class TestStockTradingEnv(unittest.TestCase):
             self.env.profit_loss,
             [0.0 for _ in range(390)]
         )
+        self.assertListEqual(self.env.trades, [1] + [0 for _ in range(388)])
 
         correct_position = (17, 289.2786)
         correct_positions =\
@@ -661,6 +676,7 @@ class TestStockTradingEnv(unittest.TestCase):
             self.env.profit_loss,
             [0.0 for _ in range(390)]
         )
+        self.assertListEqual(self.env.trades, [1] + [0 for _ in range(388)])
 
         correct_position = (-17, step0_close)
         correct_positions =\

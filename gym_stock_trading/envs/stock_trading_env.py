@@ -295,6 +295,7 @@ class StockTradingEnv(gym.Env):
         self.cash = [allotted_amount]
         self.profit_loss = [0.0]
         self.positions = [(0, 0.0)]     # (qty, price)
+        self.trades = []
         self.rewards = [0.0]
         self.max_qty = None
 
@@ -393,6 +394,7 @@ class StockTradingEnv(gym.Env):
             self.cash.append(self.cash[-1] - purchase_amount)
             self.equity.append(self.cash[-1] + purchase_amount)
             self.profit_loss.append(0.0)
+            self.trades.append(1)
 
         elif curr_qty > 0 and curr_qty + trade_qty < 0 or\
                 curr_qty < 0 and curr_qty + trade_qty > 0:
@@ -421,6 +423,7 @@ class StockTradingEnv(gym.Env):
             self.positions.append(new_position)
             self.cash.append(self.cash[-1] - purchase_amount)
             self.equity.append(self.cash[-1] + purchase_amount)
+            self.trades.append(2)
 
         else:
             # Trade increases or reduces position (including closing out)
@@ -446,6 +449,7 @@ class StockTradingEnv(gym.Env):
                 self.positions.append(new_position)
                 self.cash.append(self.cash[-1] - purchase_amount)
                 self.profit_loss.append(0.0)
+                self.trades.append(1)
 
                 if total_qty > 0:
                     # Long position
@@ -474,6 +478,11 @@ class StockTradingEnv(gym.Env):
                         self.cash[-1] + abs(trade_qty * curr_price))
                     self.profit_loss.append(
                         (curr_price - avg_price) * abs(trade_qty))
+                
+                if trade_qty == 0:
+                    self.trades.append(0)
+                else:
+                    self.trades.append(1)
 
                 net_qty = curr_qty + trade_qty
 
@@ -540,6 +549,7 @@ class StockTradingEnv(gym.Env):
         self.profit_loss = [0.0]
         self.cash = [self.base_value]
         self.positions = [(0, 0.0)]
+        self.trades = []
         self.rewards = [0.0]
         self.max_qty = int((self.base_value
                             / self.asset_data.iloc[self.current_step]['open']))
