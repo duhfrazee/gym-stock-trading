@@ -517,7 +517,7 @@ class StockTradingEnv(gym.Env):
 
         next_price = self.asset_data.iloc[self.current_step]['close']
 
-        reward = (next_price - curr_price) * self.positions[-1][0] # * (self.trades[-1] * -0.5)
+        reward = (next_price - curr_price) * self.positions[-1][0] * (self.trades[-1] * -0.5)
         self.equity[-1] += reward
         self.rewards.append(reward)
 
