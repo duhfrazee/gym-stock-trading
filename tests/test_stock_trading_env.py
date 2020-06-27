@@ -146,30 +146,30 @@ class TestStockTradingEnv(unittest.TestCase):
             np.testing.assert_array_equal(observation_, correct_obs)
             self.assertEqual(observation_.shape[1], i)
 
-    def test_observation_size_2_to_400_for_step_1_to_done(self):
+    # def test_observation_size_2_to_400_for_step_1_to_done(self):
 
-        for obs_size in range(2, 401):
-            self.env = gym.make(
-                'gym_stock_trading:StockTrading-v0',
-                market_data=self.market_data,
-                daily_avg_volume=self.daily_avg_volume,
-                observation_size=obs_size
-            )
+    #     for obs_size in range(2, 401):
+    #         self.env = gym.make(
+    #             'gym_stock_trading:StockTrading-v0',
+    #             market_data=self.market_data,
+    #             daily_avg_volume=self.daily_avg_volume,
+    #             observation_size=obs_size
+    #         )
 
-            obs = self._reset_env()
-            step = 1
-            done = False
-            while not done:
+    #         obs = self._reset_env()
+    #         step = 1
+    #         done = False
+    #         while not done:
 
-                action = np.array([0.0])
-                observation_, _, done, _ = self.env.step(action)
+    #             action = np.array([0.0])
+    #             observation_, _, done, _ = self.env.step(action)
 
-                correct_obs = self._get_correct_observation(step, obs_size)
+    #             correct_obs = self._get_correct_observation(step, obs_size)
 
-                np.testing.assert_array_equal(observation_, correct_obs)
-                self.assertEqual(observation_.shape[1], obs_size)
+    #             np.testing.assert_array_equal(observation_, correct_obs)
+    #             self.assertEqual(observation_.shape[1], obs_size)
 
-                step += 1
+    #             step += 1
 
     def test_simple_long_trade_of_50_percent_for_1_step(self):
         _ = self._reset_env()
