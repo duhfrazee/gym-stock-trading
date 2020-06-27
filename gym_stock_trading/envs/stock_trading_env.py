@@ -267,7 +267,7 @@ class StockTradingEnv(gym.Env):
 
     def __init__(self, market_data, daily_avg_volume=None,
                  observation_size=1, volume_enabled=True,
-                 allotted_amount=10000.0):
+                 trade_penalty=0.0, allotted_amount=10000.0):
         super(StockTradingEnv, self).__init__()
 
         # TODO type check all variables
@@ -280,12 +280,12 @@ class StockTradingEnv(gym.Env):
         self.market_data = market_data
         self.asset_data = None
         self.normalized_asset_data = None
-
-        # self.previous_closes = previous_closes
         self.previous_close = None
 
         self.observation_size = observation_size
         self.volume_enabled = volume_enabled
+
+        self.trade_penalty = trade_penalty
 
         if self.volume_enabled:
             self.daily_avg_volume = daily_avg_volume
@@ -517,7 +517,8 @@ class StockTradingEnv(gym.Env):
 
         next_price = self.asset_data.iloc[self.current_step]['close']
 
-        reward = (next_price - curr_price) * self.positions[-1][0] * (self.trades[-1] * -0.5)
+        reward = (next_price - curr_price) * self.positions[-1][0]\
+            + (self.trades[-1] * -self.trade_penalty)
         self.equity[-1] += reward
         self.rewards.append(reward)
 
