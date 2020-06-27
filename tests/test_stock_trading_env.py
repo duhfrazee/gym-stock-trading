@@ -695,6 +695,54 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertEqual(self.env.cash[-1], cash)
         self.assertAlmostEqual(self.env.equity[-1], cash + curr_stock_value)
 
+    def test_trade_penalty_on_long_to_short(self):
+        penalty = 0.5
+        self.env = gym.make(
+                'gym_stock_trading:StockTrading-v0',
+                market_data=self.market_data,
+                daily_avg_volume=self.daily_avg_volume,
+                observation_size=1,
+                trade_penalty=penalty
+        )
+        _ = self._reset_env()
+        step0_close = 289.2786
+        step1_close = 289.04
+        step2_close = 288.45
+
+        # Go long 50%
+        action1 = np.array([0.5])
+        observation_, reward, done, _ = self.env.step(action1)
+
+        correct_reward = ((step1_close - step0_close) * 17) - penalty
+        self.assertAlmostEqual(reward, correct_reward)
+
+        # Go short 85%
+        action2 = np.array([-0.85])
+        observation_, reward, done, _ = self.env.step(action2)
+
+        correct_observation = self._get_correct_observation(2, 1)
+        np.testing.assert_array_equal(observation_, correct_observation)
+
+        correct_reward = ((step2_close - step1_close) * -29) - 1.0
+        correct_profit_loss = (step1_close - step0_close) * 17
+        self.assertAlmostEqual(reward, correct_reward)
+        self.assertEqual(done, False)
+        self.assertAlmostEqual(
+            self.env.profit_loss,
+            [0.0, 0.0, correct_profit_loss]
+        )
+        self.assertListEqual(self.env.trades, [1, 2])
+
+        purchase_amount = 29 * step1_close
+        cash = 10000 + self.env.profit_loss[-1] - purchase_amount
+        self.assertAlmostEqual(self.env.cash[-1], cash)
+        self.assertAlmostEqual(
+            self.env.equity[-1], cash + purchase_amount + correct_reward)
+
+        correct_position = (-29, step1_close)
+        self.assertEqual(self.env.positions[-1][0], correct_position[0])
+        self.assertAlmostEqual(self.env.positions[-1][1], correct_position[1])
+
     def _yield_market_data(self, asset_data_json):
         while True:
             asset_data = pd.read_json(asset_data_json)
