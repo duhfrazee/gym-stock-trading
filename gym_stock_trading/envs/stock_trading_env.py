@@ -528,6 +528,7 @@ class StockTradingEnv(gym.Env):
                 "reward": sum(self.rewards),
                 "mode": 'backtest'
             },
+            "trades": sum(self.trades)
         }
 
         # Episode ends when down 5% or DataFrame ends
