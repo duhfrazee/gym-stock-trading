@@ -23,7 +23,7 @@ pip install -e .
 ### Environment initialization
 **Gym Stock Trading Environment**
 - market_data:
-  - generator that yields a touple of (asset_data, previous_close)
+  - generator that yields a tuple of (asset_data, previous_close)
     - asset_data: dataframe with 1 full day of 1 min aggregate bars
     - previous_close: previous day closing price
 - daily_avg_volume=None:
