@@ -1,6 +1,7 @@
 """
 This module is a stock trading environment for OpenAI gym
-including matplotlib visualizations.
+including matplotlib visualizations. See the StockTradingEnv
+class for a description of how the environment operates.
 """
 import datetime
 import os
@@ -232,19 +233,22 @@ class StockTradingEnv(gym.Env):
     """
     Description:
         A simulated stock trading environment with the ability go long and
-        short. The data is the normalized OHLC and volume values for
-        1 minute candlesticks.
+        short. The data is the normalized OHLCV values provided by the user,
+        currently supporting 1 minute candlesticks.
 
     Observation:
         Type: Box(low=0, high=1, shape=(5, observation_size), dtype=np.float16)
         Description: The observation_size is set during environment creation
             and represents the number of 1min candlesticks in the observation.
+            OHLC are normalized by dividing 2 * previous close and volume is
+            normalized by dividing the volume by daily_avg_volume.
+            (Example: open / (2 * previous_close))
         Num	Observation               Min             Max
-        0	Open                      -1              1
-        1	High                      -1              1
-        2	Low                       -1              1
-        3	Close                     -1              1
-        4   Volume                    -1              1
+        0	Open                      0               1
+        1	High                      0               1
+        2	Low                       0               1
+        3	Close                     0               1
+        4   Volume                    0               1
 
     Actions:
         Type: spaces.Box(
@@ -255,9 +259,11 @@ class StockTradingEnv(gym.Env):
         0	Percentage of account to invest     -1          1
 
     Reward:
-        Reward is the unrealized profit/loss for the next observation.
+        Reward is the unrealized profit/loss based on the next observation.
+        Example: Buy 1 share at $100, next observation price is $110. 
+            Reward = $10
     Starting State:
-        First candlestick observation in dataset.
+        First normalized candlestick observation in dataset.
     Episode Termination:
         Agent loses more than 5% or day ends.
     """
@@ -270,10 +276,6 @@ class StockTradingEnv(gym.Env):
                  trade_penalty=0.0, allotted_amount=10000.0):
         super(StockTradingEnv, self).__init__()
 
-        # TODO type check all variables
-        # market_data: generator
-        # previous_close: generator
-        # daily avg volume: int
         self.current_episode = 0
         self.current_step = 0
 
@@ -478,7 +480,7 @@ class StockTradingEnv(gym.Env):
                         self.cash[-1] + abs(trade_qty * curr_price))
                     self.profit_loss.append(
                         (curr_price - avg_price) * abs(trade_qty))
-                
+
                 if trade_qty == 0:
                     self.trades.append(0)
                 else:

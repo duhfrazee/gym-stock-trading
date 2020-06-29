@@ -30,11 +30,14 @@ try:
 except KeyError:
     logger.error("KeyError for Alpaca credentials.")
 
+
 class AlpacaStockTradingEnv(gym.Env):
     """
     Description:
-        A simulated stock trading environment with the ability go long and
-        short. The data is the normalized OHLC and volume values for
+        A live stock trading environment utilizing Alpaca Trade API.
+        The environment utilizes websockets for trade updates and market data.
+        Alpaca API keys are required for this environment to operate.
+        The data is the normalized OHLC and volume values for
         1 minute candlesticks.
 
     Observation:
@@ -42,11 +45,11 @@ class AlpacaStockTradingEnv(gym.Env):
         Description: The observation_size is set during environment creation
             and represents the number of 1min candlesticks in the observation.
         Num	Observation               Min             Max
-        0	Open                      -1              1
-        1	High                      -1              1
-        2	Low                       -1              1
-        3	Close                     -1              1
-        4   Volume                    -1              1
+        0	Open                      0               1
+        1	High                      0               1
+        2	Low                       0               1
+        3	Close                     0               1
+        4   Volume                    0               1
 
     Actions:
         Type: spaces.Box(
@@ -58,10 +61,11 @@ class AlpacaStockTradingEnv(gym.Env):
 
     Reward:
         Reward is the unrealized profit/loss for the next observation.
+        Realized Profit/Loss is also tracked in the info dict.
     Starting State:
-        First candlestick observation in dataset.
+        First candlestick observation once the market opens
     Episode Termination:
-        Agent loses more than 5% or day ends.
+        Agent loses more than 5% or 11 minutes before market close.
     """
 
     metadata = {'render.modes': ['human']}
@@ -90,7 +94,6 @@ class AlpacaStockTradingEnv(gym.Env):
         # Already running
         logger.error(e)
 
-    # TODO in the future add data type here (min, 5min, etc)
     def __init__(self, symbol, previous_close, daily_avg_volume=None,
                  live=False, observation_size=1, volume_enabled=True,
                  allotted_amount=10000.0):
@@ -157,7 +160,7 @@ class AlpacaStockTradingEnv(gym.Env):
         self.observation_space = spaces.Box(
             low=0, high=1, shape=(5, observation_size), dtype=np.float16)
 
-        logger.info('Initialized AlpacaStockTradingEnv with the following information: ')
+        logger.info('Initialized AlpacaStockTradingEnv: ')
         logger.info('Live: %s', self.live)
         logger.info('Symbol: %s', self.symbol)
         logger.info('volume_enabled: %s', self.volume_enabled)
@@ -235,7 +238,7 @@ class AlpacaStockTradingEnv(gym.Env):
                     #     # TODO test
                     #     # Missing a bar or market is frozen
                     #     if bar.start >\
-                    #             self.asset_data.iloc[-1].index\
+                    #             self.asset_data.index[-1]\
                     #             + timedelta(seconds=90):
                     #         self._initialize_data()
 
