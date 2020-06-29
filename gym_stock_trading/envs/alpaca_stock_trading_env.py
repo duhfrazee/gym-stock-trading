@@ -117,8 +117,6 @@ class AlpacaStockTradingEnv(gym.Env):
             api_version='v2'
         )
 
-        # self.stream = Stream(self.symbol, self.live)
-
         if self.live:
             self._on_minute_bars =\
                 self.live_conn.on(r'^AM$')(self._on_minute_bars)
@@ -146,6 +144,7 @@ class AlpacaStockTradingEnv(gym.Env):
         self.positions = [(0, 0.0)]     # (qty, price)
         self.alpaca_positions = [(0, 0.0)]  # actual traded positions
         self.current_alpaca_position = (0, 0.0)
+        self.trades = []
         self.rewards = [0.0]
         self.max_qty = None
 
@@ -220,7 +219,7 @@ class AlpacaStockTradingEnv(gym.Env):
         while not self.market.is_open:
             curr_time = datetime.datetime.now(self.eastern)
             next_open = self.market.next_open.astimezone(self.eastern)
-            wait_time = (next_open-curr_time).seconds + 1
+            wait_time = (next_open-curr_time).seconds + 10
 
             print('Waiting ' + str(wait_time) + ' seconds for market to open.')
 
@@ -563,7 +562,6 @@ class AlpacaStockTradingEnv(gym.Env):
         # Close 11 minutes before end of day
         now = datetime.datetime.now(self.eastern)
 
-        # TODO likely eastern needs to be on the time not the "combine" function
         stop_time = self.eastern.localize(
             datetime.datetime.combine(
                 now,
@@ -598,6 +596,7 @@ class AlpacaStockTradingEnv(gym.Env):
         self.cash = [self.base_value]
         self.positions = [(0, 0.0)]
         self.rewards = [0.0]
+        self.trades = []
 
         observation = self._next_observation()
 
