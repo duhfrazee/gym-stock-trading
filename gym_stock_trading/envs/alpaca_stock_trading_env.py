@@ -17,7 +17,6 @@ import pandas as pd
 from datetime import timedelta
 from gym import error, spaces, utils
 from gym.utils import seeding
-# from gym_stock_trading.envs.helpers.stream import Stream
 from pytz import timezone
 
 logger = logging.getLogger(__name__)
