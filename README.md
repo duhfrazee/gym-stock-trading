@@ -4,7 +4,7 @@ Gym Stock Trading is an OpenAI Gym environment for stock trading with integratio
 ## Basics
 For a better understanding of OpenAI Gym, check out the docs: https://github.com/openai/gym
 
-### There are two environments included
+### There are two environments included:
 
 **Gym Stock Trading Environment** uses 1min OHLCV (Open, High, Low, Close, Volume) aggregate bars as market data and provides unrealized profit/loss as a reward to the agent. Details of the operations of the environment can be found in the class docstring.
 
