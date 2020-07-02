@@ -581,8 +581,7 @@ class AlpacaStockTradingEnv(gym.Env):
 
         if done:
             self.close()
-            reward = 0.0
-            self.rewards.append(reward)
+            self.rewards.append(0.0)
             self.alpaca_positions.append(self.current_alpaca_position)
             info["closing_trades"] = {
                 "profit_loss": {
