@@ -572,19 +572,31 @@ class AlpacaStockTradingEnv(gym.Env):
         )
 
         if now > stop_time:
-            tOrder = threading.Thread(
-                target=self._close_position)
-            tOrder.start()
             done = True
         # TODO this needs to be more reflective of real data in future
         elif (self.equity[-1] - self.base_value) / self.base_value <= -0.05:
-            tOrder = threading.Thread(
-                target=self._close_position)
-            tOrder.start()
             done = True
         else:
             done = False
 
+        if done:
+            self.close()
+            reward = 0.0
+            self.rewards.append(reward)
+            self.alpaca_positions.append(self.current_alpaca_position)
+            info["closing_trades"] = {
+                "profit_loss": {
+                    "date_time": self.asset_data.index[-1],
+                    "profit_loss": self.profit_loss[-1],
+                    "reward": reward,
+                    "mode": 'live' if self.live else 'paper'
+                },
+                "trades": {},
+                "positions": {
+                    "env_position": self.positions[-1],
+                    "actual_position": self.current_alpaca_position
+                }
+            }
         return obs, reward, done, info
 
     def reset(self):

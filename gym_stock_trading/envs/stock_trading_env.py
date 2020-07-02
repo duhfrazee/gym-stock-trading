@@ -524,6 +524,16 @@ class StockTradingEnv(gym.Env):
         self.equity[-1] += reward
         self.rewards.append(reward)
 
+        # Episode ends when down 5% or DataFrame ends
+        if self.current_step + 2 == len(self.asset_data):
+            done = True
+        else:
+            done = True if self.equity[-1] / self.base_value <= -0.05\
+                else False
+
+        if done:
+            self.close()
+
         info = {
             "profit_loss": {
                 "date_time": self.asset_data.index[0].date(),
@@ -533,13 +543,6 @@ class StockTradingEnv(gym.Env):
             },
             "trades": sum(self.trades)
         }
-
-        # Episode ends when down 5% or DataFrame ends
-        if self.current_step + 2 == len(self.asset_data):
-            done = True
-        else:
-            done = True if self.equity[-1] / self.base_value <= -0.05\
-                        else False
 
         return obs, reward, done, info
 
@@ -572,8 +575,8 @@ class StockTradingEnv(gym.Env):
             window_size=LOOKBACK_WINDOW_SIZE)
 
     def close(self):
-        # action = np.array([0.0])
+        action = np.array([0.0])
 
-        # # close positions
-        # self._take_action(action)
+        # Close positions
+        self._take_action(action)
         pass

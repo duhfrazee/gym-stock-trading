@@ -631,27 +631,26 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertAlmostEqual(reward, correct_reward)
         self.assertAlmostEqual(sum(self.env.rewards), correct_total_reward)
         self.assertEqual(done, True)
-        self.assertEqual(len(self.env.profit_loss), 390)
+        self.assertEqual(len(self.env.profit_loss), 391)
         self.assertListEqual(
             self.env.profit_loss,
-            [0.0 for _ in range(390)]
+            [0.0 for _ in range(390)] + [-3.5461999999998284]
         )
-        self.assertListEqual(self.env.trades, [1] + [0 for _ in range(388)])
+        self.assertListEqual(
+            self.env.trades, [1] + [0 for _ in range(388)] + [1])
 
-        correct_position = (17, 289.2786)
+        correct_position = (0, 0.0)
         correct_positions =\
-            [(0, 0.0)] + [(17, step0_close) for _ in range(389)]
+            [(0, 0.0)] + [(17, step0_close) for _ in range(389)] + [(0, 0.0)]
         self.assertListEqual(
             self.env.positions,
             correct_positions
         )
         self.assertEqual(self.env.positions[-1], correct_position)
 
-        purchase_amount = correct_position[0] * correct_position[1]
-        cash = 10000.0 - purchase_amount
-        curr_stock_value = 17 * last_step_close
+        cash = 10000.0 - 3.5461999999998284
         self.assertEqual(self.env.cash[-1], cash)
-        self.assertAlmostEqual(self.env.equity[-1], cash + curr_stock_value)
+        self.assertAlmostEqual(self.env.equity[-1], cash)
 
     def test_stay_short_50_percent_entire_episode(self):
         _ = self._reset_env()
@@ -676,24 +675,23 @@ class TestStockTradingEnv(unittest.TestCase):
         self.assertEqual(done, True)
         self.assertListEqual(
             self.env.profit_loss,
-            [0.0 for _ in range(390)]
+            [0.0 for _ in range(390)] + [3.5461999999998284]
         )
-        self.assertListEqual(self.env.trades, [1] + [0 for _ in range(388)])
+        self.assertListEqual(
+            self.env.trades, [1] + [0 for _ in range(388)] + [1])
 
-        correct_position = (-17, step0_close)
+        correct_position = (0, 0.0)
         correct_positions =\
-            [(0, 0.0)] + [(-17, step0_close) for _ in range(389)]
+            [(0, 0.0)] + [(-17, step0_close) for _ in range(389)]\
+            + [correct_position]
         self.assertListEqual(
             self.env.positions,
             correct_positions
         )
 
-        purchase_amount = abs(correct_position[0] * correct_position[1])
-        cash = 10000.0 - purchase_amount
-        curr_stock_value = self._calculate_short_equity_value(
-            17, step0_close, last_step_close)
+        cash = 10000.0 + 3.5461999999998284
         self.assertEqual(self.env.cash[-1], cash)
-        self.assertAlmostEqual(self.env.equity[-1], cash + curr_stock_value)
+        self.assertAlmostEqual(self.env.equity[-1], cash)
 
     def test_trade_penalty_on_long_to_short(self):
         penalty = 0.5
