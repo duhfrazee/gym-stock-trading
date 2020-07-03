@@ -581,7 +581,8 @@ class AlpacaStockTradingEnv(gym.Env):
 
         if done:
             self.close()
-            self.rewards.append(0.0)
+            reward = 0.0
+            self.rewards.append(reward)
             self.alpaca_positions.append(self.current_alpaca_position)
             info["closing_trades"] = {
                 "profit_loss": {
@@ -624,9 +625,13 @@ class AlpacaStockTradingEnv(gym.Env):
 
     def close(self):
         # Ensure no positions are held over night
-        tOrder = threading.Thread(
-            target=self._close_position)
-        tOrder.start()
-        tOrder.join()
+        # tOrder = threading.Thread(
+        #     target=self._close_position)
+        # tOrder.start()
+        # tOrder.join()
+
+        # Close positions
+        action = np.array([0.0])
+        self._take_action(action)
 
         # TODO figure out how to cancel open orders
