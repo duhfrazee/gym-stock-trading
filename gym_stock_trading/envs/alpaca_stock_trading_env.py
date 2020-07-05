@@ -69,7 +69,8 @@ class AlpacaStockTradingEnv(gym.Env):
 
     metadata = {'render.modes': ['human']}
     eastern = timezone('US/Eastern')
-    channels = ['AM.*', 'trade_updates']
+    live_channels = ['AM.*', 'trade_updates']
+    paper_channels = ['trade_updates']
 
     live_conn = tradeapi.StreamConn(
         LIVE_APCA_API_KEY_ID,
@@ -82,12 +83,11 @@ class AlpacaStockTradingEnv(gym.Env):
     )
 
     try:
-        # tLWS = threading.Thread(
-        #     target=live_conn.run, args=[channels])
-        # tLWS.start()
-        logger.info('Connecting to channels: %s', channels)
+        tLWS = threading.Thread(
+            target=live_conn.run, args=[live_channels])
+        tLWS.start()
         tPWS = threading.Thread(
-            target=paper_conn.run, args=[channels])
+            target=paper_conn.run, args=[paper_channels])
         tPWS.start()
     except RuntimeError as e:
         # Already running
@@ -119,14 +119,13 @@ class AlpacaStockTradingEnv(gym.Env):
             api_version='v2'
         )
 
+        self._on_minute_bars =\
+            self.live_conn.on(r'^AM$')(self._on_minute_bars)
+
         if self.live:
-            self._on_minute_bars =\
-                self.live_conn.on(r'^AM$')(self._on_minute_bars)
             self._on_trade_updates =\
                 self.live_conn.on(r'trade_updates$')(self._on_trade_updates)
         else:
-            self._on_minute_bars =\
-                self.paper_conn.on(r'^AM$')(self._on_minute_bars)
             self._on_trade_updates =\
                 self.paper_conn.on(r'trade_updates$')(self._on_trade_updates)
 
