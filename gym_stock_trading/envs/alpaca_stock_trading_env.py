@@ -574,7 +574,7 @@ class AlpacaStockTradingEnv(gym.Env):
         if now > stop_time:
             done = True
         # TODO this needs to be more reflective of real data in future
-        elif (self.equity[-1] - self.base_value) / self.base_value <= -0.05:
+        elif (self.equity[-1] - self.base_value) / self.base_value <= -0.02:
             done = True
         else:
             done = False
