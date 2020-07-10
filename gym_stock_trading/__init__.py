@@ -5,7 +5,7 @@ register(
     entry_point='gym_stock_trading.envs.stock_trading_env:StockTradingEnv'
 )
 
-# register(
-#     id='AlpacaStockTrading-v0',
-#     entry_point='gym_stock_trading.envs.alpaca_stock_trading_env:AlpacaStockTradingEnv'
-# )
+register(
+    id='AlpacaStockTrading-v0',
+    entry_point='gym_stock_trading.envs.alpaca_stock_trading_env:AlpacaStockTradingEnv'
+)
