@@ -257,15 +257,21 @@ class AlpacaStockTradingEnv(gym.Env):
         # logger.info('async _on_trade_updates called for %s', order)
         if order['symbol'] == self.symbol:
             if event == 'fill' or event == 'partial_fill':
-                if order['side'] == 'buy':
-                    fill_qty = int(account.qty)
-                else:
-                    fill_qty = -int(account.qty)
+                close_price = self.asset_data.iloc[-1].close
 
                 fill_price = float(account.price)
                 position_qty = int(account.position_qty)
                 curr_qty = self.current_alpaca_position[0]
                 curr_avg_price = self.current_alpaca_position[1]
+
+                if order['side'] == 'buy':
+                    fill_qty = int(account.qty)
+                    slippage_per_share = close_price - fill_price
+                else:
+                    fill_qty = -int(account.qty)
+                    slippage_per_share = fill_price - close_price
+
+                total_slippage = slippage_per_share * abs(fill_qty)
 
                 if position_qty != 0:
                     if curr_qty >= 0 and fill_qty > 0\
@@ -280,6 +286,19 @@ class AlpacaStockTradingEnv(gym.Env):
                     avg_price = 0.0
 
                 self.current_alpaca_position = (position_qty, avg_price)
+
+                trade = {
+                    'symbol': self.symbol,
+                    'time': order['filled_at'],
+                    'fill_price': fill_price,
+                    'fill_qty': int(account.qty),
+                    'env_time': self.asset_data.index[-1],
+                    'env_price': close_price,
+                    'side': order['side'],
+                    'slippage_per_share': slippage_per_share,
+                    'total_slippage': total_slippage,
+                }
+                self.trades.append(trade)
 
     def _next_observation(self):
         """Get the stock data for the current observation size."""
@@ -554,12 +573,15 @@ class AlpacaStockTradingEnv(gym.Env):
                 "reward": reward,
                 "mode": 'live' if self.live else 'paper'
             },
-            "trades": {},
+            "trades": self.trades,
             "positions": {
                 "env_position": self.positions[-1],
                 "actual_position": self.current_alpaca_position
             }
         }
+
+        # Clear trades for future trades
+        self.trades = []
 
         # Close 11 minutes before end of day
         now = datetime.datetime.now(self.eastern)
@@ -591,7 +613,7 @@ class AlpacaStockTradingEnv(gym.Env):
                     "reward": reward,
                     "mode": 'live' if self.live else 'paper'
                 },
-                "trades": {},
+                "trades": self.trades,
                 "positions": {
                     "env_position": self.positions[-1],
                     "actual_position": self.current_alpaca_position
