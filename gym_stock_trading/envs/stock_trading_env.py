@@ -522,7 +522,6 @@ class StockTradingEnv(gym.Env):
 
         reward = (next_price - curr_price) * self.positions[-1][0]\
             + (abs(self.trades[-1][1]) * -self.trade_penalty)
-        print(self.trades[-1][1], self.trade_penalty)
         self.equity[-1] += reward
         self.rewards.append(reward)
 
