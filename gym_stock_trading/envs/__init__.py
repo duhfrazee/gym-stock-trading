@@ -1,3 +1,2 @@
 from gym_stock_trading.envs.stock_trading_env import StockTradingEnv
 from gym_stock_trading.envs.alpaca_stock_trading_env import AlpacaStockTradingEnv
-from gym_stock_trading.envs.paper_alpaca_stock_trading_env import PaperAlpacaStockTradingEnv
