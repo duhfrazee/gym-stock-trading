@@ -396,11 +396,13 @@ class StockTradingEnv(gym.Env):
             self.cash.append(self.cash[-1] - purchase_amount)
             self.equity.append(self.cash[-1] + purchase_amount)
             self.profit_loss.append(0.0)
-            self.trades.append(1)
+            self.trades.append((1, trade_qty))
 
         elif curr_qty > 0 and curr_qty + trade_qty < 0 or\
                 curr_qty < 0 and curr_qty + trade_qty > 0:
+
             # Trade crosses from short to long or long to short
+            self.trades.append((2, trade_qty))
 
             # Close current position, update P/L and cash
             if curr_qty > 0:
@@ -425,7 +427,6 @@ class StockTradingEnv(gym.Env):
             self.positions.append(new_position)
             self.cash.append(self.cash[-1] - purchase_amount)
             self.equity.append(self.cash[-1] + purchase_amount)
-            self.trades.append(2)
 
         else:
             # Trade increases or reduces position (including closing out)
@@ -451,7 +452,7 @@ class StockTradingEnv(gym.Env):
                 self.positions.append(new_position)
                 self.cash.append(self.cash[-1] - purchase_amount)
                 self.profit_loss.append(0.0)
-                self.trades.append(1)
+                self.trades.append((1, trade_qty))
 
                 if total_qty > 0:
                     # Long position
@@ -482,9 +483,9 @@ class StockTradingEnv(gym.Env):
                         (curr_price - avg_price) * abs(trade_qty))
 
                 if trade_qty == 0:
-                    self.trades.append(0)
+                    self.trades.append((0, 0))
                 else:
-                    self.trades.append(1)
+                    self.trades.append((1, trade_qty))
 
                 net_qty = curr_qty + trade_qty
 
@@ -520,7 +521,8 @@ class StockTradingEnv(gym.Env):
         next_price = self.asset_data.iloc[self.current_step]['close']
 
         reward = (next_price - curr_price) * self.positions[-1][0]\
-            + (self.trades[-1] * -self.trade_penalty)
+            + (abs(self.trades[-1][1]) * -self.trade_penalty)
+        print(self.trades[-1][1], self.trade_penalty)
         self.equity[-1] += reward
         self.rewards.append(reward)
 
@@ -541,7 +543,7 @@ class StockTradingEnv(gym.Env):
                 "reward": sum(self.rewards),
                 "mode": 'backtest'
             },
-            "trades": sum(self.trades)
+            "trades": sum([trade[0] for trade in self.trades])
         }
 
         return obs, reward, done, info
