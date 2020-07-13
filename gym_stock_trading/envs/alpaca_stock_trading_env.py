@@ -289,6 +289,7 @@ class AlpacaStockTradingEnv(gym.Env):
 
                 trade = {
                     'symbol': self.symbol,
+                    'order_type': order['order_type'],
                     'time': order['filled_at'],
                     'fill_price': fill_price,
                     'fill_qty': int(account.qty),
